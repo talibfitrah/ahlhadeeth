@@ -1,0 +1,87 @@
+package org.murabbie.ahlalhadeeth.data
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.downloader.Downloader
+import org.schabi.newpipe.extractor.downloader.Response
+import org.schabi.newpipe.extractor.localization.ContentCountry
+import org.schabi.newpipe.extractor.localization.Localization
+import org.schabi.newpipe.extractor.stream.StreamInfo
+import java.util.concurrent.TimeUnit
+
+/**
+ * استخراج روابط وسائط يوتيوب (صوت m4a أو فيديو mp4) على الهاتف بمكتبة NewPipe Extractor،
+ * لنقل الدروس إلى خادم البيانات فلا يعتمد التشغيل على يوتيوب.
+ */
+object YouTubeMedia {
+
+    data class Pick(val url: String, val mime: String, val ext: String, val bitrateKbps: Int, val isVideo: Boolean, val resolution: String)
+    /**
+     * @param audio أفضل صوت (m4a ثم opus)
+     * @param video فيديو مدمج (صوت+صورة) mp4 ≤ ٣٦٠p — ملف واحد
+     * @param videoHd فيديو بلا صوت (H.264 mp4) بأعلى دقة ≤ ١٠٨٠p — يُدمج مع [audio] على الهاتف (MediaMuxer) للجودة العالية
+     */
+    data class Extracted(val title: String, val uploader: String, val durationSec: Long, val audio: Pick?, val video: Pick?, val subtitleArUrl: String?, val videoHd: Pick? = null)
+
+    /** الجودة المطلوبة عند النقل */
+    const val QUALITY_AUDIO = 0
+    const val QUALITY_VIDEO_SD = 1
+    const val QUALITY_VIDEO_HD = 2
+
+    fun qualityLabel(q: Int): String = when (q) { QUALITY_VIDEO_SD -> "مرئية عادية (٣٦٠p)"; QUALITY_VIDEO_HD -> "مرئية عالية (حتى ١٠٨٠p)"; else -> "مسموعة فقط (صوت m4a)" }
+
+    private class OkDownloader : Downloader() {
+        private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
+        override fun execute(request: org.schabi.newpipe.extractor.downloader.Request): Response {
+            val b = Request.Builder().url(request.url())
+            val data = request.dataToSend()
+            b.method(request.httpMethod(), data?.toRequestBody())
+            for ((k, vs) in request.headers()) for (v in vs) b.addHeader(k, v)
+            if (request.headers()["User-Agent"] == null) b.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+            client.newCall(b.build()).execute().use { resp ->
+                val body = resp.body?.string() ?: ""
+                return Response(resp.code, resp.message, resp.headers.toMultimap(), body, request.url())
+            }
+        }
+    }
+
+    @Volatile private var inited = false
+    private fun ensureInit() {
+        if (!inited) synchronized(this) {
+            if (!inited) {
+                NewPipe.init(OkDownloader(), Localization("ar", "SA"), ContentCountry("SA"))
+                inited = true
+            }
+        }
+    }
+
+    /** استخراج أفضل صوت (m4a 128k ثم opus) وأفضل فيديو مدمج (mp4 ≤ ٣٦٠p) */
+    suspend fun extract(videoId: String): Extracted = withContext(Dispatchers.IO) {
+        ensureInit()
+        val info = StreamInfo.getInfo(ServiceList.YouTube, YouTube.watchUrl(videoId))
+        val audios = info.audioStreams.filter { !it.content.isNullOrBlank() }
+        val m4a = audios.filter { it.format?.name == "M4A" }.maxByOrNull { it.averageBitrate }
+        val opus = audios.filter { it.format?.name?.contains("OPUS") == true || it.format?.name?.contains("WEBM") == true }.maxByOrNull { it.averageBitrate }
+        val audio = (m4a ?: opus ?: audios.maxByOrNull { it.averageBitrate })?.let { a ->
+            val isM4a = a.format?.name == "M4A"
+            Pick(a.content, if (isM4a) "audio/mp4" else "audio/webm", if (isM4a) "m4a" else "webm", a.averageBitrate, false, "")
+        }
+        // فيديو مدمج (صوت+صورة) mp4: يفضَّل ٣٦٠p لخفة الحجم
+        val muxed = info.videoStreams.filter { !it.content.isNullOrBlank() && it.format?.name == "MPEG_4" }
+        val video = (muxed.firstOrNull { it.getResolution().startsWith("360") } ?: muxed.minByOrNull { it.getResolution().filter { c -> c.isDigit() }.toIntOrNull() ?: 9999 })?.let { v ->
+            Pick(v.content, "video/mp4", "mp4", v.bitrate / 1000, true, v.getResolution())
+        }
+        // فيديو بلا صوت H.264 (mp4): ٧٢٠p إن وُجد وإلا أعلى دقة ≤ ١٠٨٠p — يُدمج مع الصوت m4a على الهاتف بلا إعادة ترميز
+        val hdCandidates = info.videoOnlyStreams.filter { !it.content.isNullOrBlank() && it.format?.name == "MPEG_4" && (it.codec.isNullOrBlank() || it.codec.startsWith("avc1")) && it.height in 480..1080 }
+        val videoHd = (hdCandidates.filter { it.height == 720 }.maxByOrNull { it.bitrate } ?: hdCandidates.maxByOrNull { it.height })?.let { v ->
+            Pick(v.content, "video/mp4", "mp4", v.bitrate / 1000, true, v.getResolution())
+        }
+        val sub = info.subtitles.firstOrNull { it.languageTag.startsWith("ar") && !it.isAutoGenerated } ?: info.subtitles.firstOrNull { it.languageTag.startsWith("ar") }
+        Extracted(info.name ?: "", info.uploaderName ?: "", info.duration, audio, video, sub?.content, videoHd)
+    }
+}

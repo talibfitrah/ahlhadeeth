@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">أهل الحديث والأثر</string>
+    <string name="notification_channel_player">تشغيل الصوت</string>
+    <string name="notification_channel_downloads">التنزيلات</string>
+</resources>

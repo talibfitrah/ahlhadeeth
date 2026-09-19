@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- تراكب نكهة Google Play: بلا إذن FOREGROUND_SERVICE_SPECIAL_USE (يحتاج إلى تصريح خاص في Play Console)؛ خدمتا النقل والتفريغ من نوع dataSync فقط -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" tools:node="remove" />
+
+    <application>
+        <service
+            android:name=".data.TransferService"
+            android:foregroundServiceType="dataSync"
+            tools:replace="android:foregroundServiceType">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" tools:node="remove" />
+        </service>
+        <service
+            android:name=".data.AutoIndexService"
+            android:foregroundServiceType="dataSync"
+            tools:replace="android:foregroundServiceType">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" tools:node="remove" />
+        </service>
+    </application>
+</manifest>

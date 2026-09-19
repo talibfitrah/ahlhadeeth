@@ -1,0 +1,17 @@
+# secrets — never commit
+keystore.properties
+*.keystore
+*.jks
+# live admins file: wraps the NAS password + Gemini key under the admin PIN
+data-samples/admins.json
+
+# build output / local state
+.gradle/
+.kotlin/
+build/
+local.properties
+*.apk
+*.aab
+__pycache__/
+.idea/
+.DS_Store

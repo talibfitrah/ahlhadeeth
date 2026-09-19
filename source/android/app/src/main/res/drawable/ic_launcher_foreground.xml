@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- كتاب مفتوح -->
+    <path
+        android:fillColor="#FFF8F5EC"
+        android:pathData="M30,34 Q42,30 54,36 Q66,30 78,34 L78,74 Q66,70 54,76 Q42,70 30,74 Z" />
+    <path
+        android:fillColor="#FF1F6F5C"
+        android:pathData="M53,37 L55,37 L55,75 L53,75 Z" />
+    <!-- موجة صوت -->
+    <path
+        android:strokeColor="#FF1F6F5C"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M36,48 Q45,44 45,54 Q45,64 36,60 M63,48 Q72,44 72,54 Q72,64 63,60" />
+    <path
+        android:fillColor="#FFC9A227"
+        android:pathData="M54,20 m-5,0 a5,5 0 1,1 10,0 a5,5 0 1,1 -10,0" />
+</vector>

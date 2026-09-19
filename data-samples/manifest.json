@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "name": "أهل الحديث والأثر",
+  "updated": "2026-09-14",
+  "app": {
+    "version_code": 18,
+    "version_name": "1.7.7",
+    "apk": {
+      "arm64": "https://files.murabbie.org/fsdownload/CgXfY8J95/ahl-alhadeeth-1.7.7-arm64.apk",
+      "arm32": "https://files.murabbie.org/fsdownload/sD3cFwqmJ/ahl-alhadeeth-1.7.7-arm32.apk",
+      "universal": "https://files.murabbie.org/fsdownload/3HbfItaRJ/ahl-alhadeeth-1.7.7-universal.apk"
+    },
+    "apk_page": {
+      "arm64": "https://files.murabbie.org/sharing/CgXfY8J95",
+      "arm32": "https://files.murabbie.org/sharing/sD3cFwqmJ",
+      "universal": "https://files.murabbie.org/sharing/3HbfItaRJ"
+    },
+    "notes": "١٫٧٫٧: تهيئة المشروع للنشر على Google Play (نكهتا بناء direct وplay، compileSdk 36) — لا تغيير في وظائف نسخة التوزيع المباشر"
+  },
+  "data": {
+    "id": "ahl_alhadeeth",
+    "version": "4.14.0-1",
+    "file": "ahl_alhadeeth.db.gz",
+    "description": "قاعدة بيانات برنامج أهل الحديث والأثر ٤٫١٤٫٠: ١٠ مشايخ، ٥٥ كتابًا، ١٣٬٧١٦ شريطًا، ٢٦٢٬٥٨٩ مقطعًا، ١١١٬٥٨٠ تفريغًا، ١٬١٩٦ تصنيفًا",
+    "size_gz": 176539707,
+    "size_db": 569331712,
+    "sha256_gz": "e5991fcc47797bb8b211bf1484e527d405698ee61020f10006c5e1f3554bcf78",
+    "sha256_db": "56e96f5d5f6281e5e5930ef105ab5dd133f1f514c4123efa2de65b7206337dad",
+    "parts": [
+      {
+        "url": "https://files.murabbie.org/fsdownload/dDjDOpRrE/ahl_alhadeeth.db.gz.001",
+        "alt_url": "http://nas.fitrahmedia.nl:5000/fsdownload/dDjDOpRrE/ahl_alhadeeth.db.gz.001",
+        "size": 26214400,
+        "sha256": "ff11d4fc11859aa821fd4b42a8b898e02a4b994eb078fbd904e66a78005e13fb"
+      },
+      {
+        "url": "https://files.murabbie.org/fsdownload/LYwBlQhes/ahl_alhadeeth.db.gz.002",
+        "alt_url": "http://nas.fitrahmedia.nl:5000/fsdownload/LYwBlQhes/ahl_alhadeeth.db.gz.002",
+        "size": 26214400,
+        "sha256": "abebb9a65a98943e3dfd9cf9e7f8ca02f5586f7c90016217407eb4e4515402e6"
+      },
+      {
+        "url": "https://files.murabbie.org/fsdownload/UR9HT5hVM/ahl_alhadeeth.db.gz.003",
+        "alt_url": "http://nas.fitrahmedia.nl:5000/fsdownload/UR9HT5hVM/ahl_alhadeeth.db.gz.003",
+        "size": 26214400,
+        "sha256": "b3fb92fea0586b0b65a599460b3493551d01b5e98b4e9f2e18ece3a56d31d318"
+      },
+      {
+        "url": "https://files.murabbie.org/fsdownload/FrNKXOwlH/ahl_alhadeeth.db.gz.004",
+        "alt_url": "http://nas.fitrahmedia.nl:5000/fsdownload/FrNKXOwlH/ahl_alhadeeth.db.gz.004",
+        "size": 26214400,
+        "sha256": "5c9a3ef78507d8a524453b8b8e2aea04f5a75d6216008f5f3b0b2e8f00096f16"
+      },
+      {
+        "url": "https://files.murabbie.org/fsdownload/LzzYAEr7U/ahl_alhadeeth.db.gz.005",
+        "alt_url": "http://nas.fitrahmedia.nl:5000/fsdownload/LzzYAEr7U/ahl_alhadeeth.db.gz.005",
+        "size": 26214400,
+        "sha256": "b0165b3ce1414279e15938f0eb103143b15df3e9b711d0399b3cd51c95c31d4c"
+      },
+      {
+        "url": "https://files.murabbie.org/fsdownload/gdcJiVIBe/ahl_alhadeeth.db.gz.006",
+        "alt_url": "http://nas.fitrahmedia.nl:5000/fsdownload/gdcJiVIBe/ahl_alhadeeth.db.gz.006",
+        "size": 26214400,
+        "sha256": "9972c4588c2301123ec3725fc452a85d48a945c1aa45d71abfa394cc443ded2f"
+      },
+      {
+        "url": "https://files.murabbie.org/fsdownload/yuS07Yrll/ahl_alhadeeth.db.gz.007",
+        "alt_url": "http://nas.fitrahmedia.nl:5000/fsdownload/yuS07Yrll/ahl_alhadeeth.db.gz.007",
+        "size": 19253307,
+        "sha256": "ed0e96f9499451ab1bac2377e7c25f566019a0cb92d37427cef69251828de5d8"
+      }
+    ]
+  },
+  "packs": [
+    {
+      "id": "example-pack",
+      "name": "حزمة تجريبية — مثال على صيغة الحزم",
+      "url": "https://files.murabbie.org/fsdownload/fY5iCrH5n/pack-example.json",
+      "version": 1,
+      "size": 1985,
+      "description": "شيخ وسلسلة ودرس واحد بثلاثة مواضع لتوضيح صيغة الحزم؛ يمكن حذفها من «المحتوى المضاف»"
+    }
+  ],
+  "shared": {
+    "url": "https://files.murabbie.org/fsdownload/4aPZIQpaW/shared-content.json",
+    "admins_url": "https://files.murabbie.org/fsdownload/jbktInN4f/admins.json",
+    "admins_file": "admins.json",
+    "api": "https://files.murabbie.org/webapi",
+    "path": "/downloads/ahl-alhadeeth",
+    "file": "shared-content.json"
+  },
+  "audio": {
+    "ext": ".mp3",
+    "servers": [
+      {
+        "title": "خادم أهل الحديث والأثر (alathar.net)",
+        "url": "https://www.alathar.net/files/sound/"
+      }
+    ],
+    "servers_v2": [
+      {
+        "title": "خادم البيانات (NAS) — نسخة كاملة من الصوت",
+        "url": "https://files.murabbie.org/webapi/entry.cgi?api=SYNO.FolderSharing.Download&version=2&method=download&mode=open&_sharing_id=ehniFEwJg&path=%5B%22%2Fdownloads%2Fahl-alhadeeth%2Fsound%2F{path}%22%5D"
+      }
+    ],
+    "default_server": "https://files.murabbie.org/webapi/entry.cgi?api=SYNO.FolderSharing.Download&version=2&method=download&mode=open&_sharing_id=ehniFEwJg&path=%5B%22%2Fdownloads%2Fahl-alhadeeth%2Fsound%2F{path}%22%5D"
+  }
+}

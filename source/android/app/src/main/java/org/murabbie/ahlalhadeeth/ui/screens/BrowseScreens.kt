@@ -1,8 +1,6 @@
 package org.murabbie.ahlalhadeeth.ui.screens
 
 import androidx.compose.foundation.clickable
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Checkbox
@@ -286,7 +284,7 @@ fun ChaptersScreen(app: App, repo: Repository, nav: NavHostController, sheekhId:
     val downloadsVersion by app.userDb.downloadsVersion.collectAsState()
     var downloaded by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val playerState by app.player.state.collectAsState()
-    val scope = rememberCoroutineScopeSafe()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val listState = rememberLazyListState()
 
     val isUser = sheekhId < 0
@@ -412,6 +410,3 @@ fun ChaptersScreen(app: App, repo: Repository, nav: NavHostController, sheekhId:
         }
     }
 }
-
-@Composable
-fun rememberCoroutineScopeSafe() = androidx.compose.runtime.rememberCoroutineScope()

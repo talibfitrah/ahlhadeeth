@@ -8,11 +8,11 @@
 - الحالة تُحفظ في mirror_state.json محليًّا وعلى الخادم (sound/_mirror_state.json) كي لا تُعاد فحوص الأحجام بلا داعٍ.
 
 الاستعمال:
-  python3 mirror_to_nas.py --super-pin 12345678            # المفتاح من admins.json بالرقم السري للمشرف العام
-  python3 mirror_to_nas.py --user manus --password …        # أو بحساب الخادم مباشرة
+  SUPER_PIN=… python3 mirror_to_nas.py                      # المفتاح من admins.json بالرقم السري للمشرف العام
+  NAS_PASSWORD=… python3 mirror_to_nas.py --user manus      # أو بحساب الخادم مباشرة (الأسرار من البيئة لا من سطر الأوامر)
   خيارات: --workers 4  --sheekh 6  --list audio_list.json  --dest /downloads/ahl-alhadeeth/sound
 """
-import argparse, base64, hashlib, http.client, json, os, re, signal, ssl, sys, threading, time, urllib.parse, urllib.request, uuid
+import argparse, base64, http.client, json, os, re, signal, ssl, sys, threading, time, urllib.parse, urllib.request, uuid
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -162,7 +162,7 @@ def credentials(a):
     reg = json.loads(fetch_share(ADMINS_URL))
     entry = at.find(reg, a.admin)
     if not entry: raise SystemExit('لا يوجد مشرف ' + a.admin)
-    key = at.derive(a.super_pin, base64.b64decode(entry['salt']), reg['kdf']['iterations'])
+    key = at.derive(a.super_pin, base64.b64decode(entry['salt']), at.iters(reg))
     if at.verifier(key) != entry['hash']: raise SystemExit('الرقم السري غير صحيح')
     lines = at.unwrap(key, entry['wrapped']).split('\n')
     return lines[0], lines[1]
@@ -227,8 +227,8 @@ def main():
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--sheekh', type=int, default=0)
     ap.add_argument('--limit', type=int, default=0, help='عدد الملفات (للتجربة)')
-    ap.add_argument('--admin', default='admin'); ap.add_argument('--super-pin', dest='super_pin')
-    ap.add_argument('--user'); ap.add_argument('--password')
+    ap.add_argument('--admin', default='admin'); ap.add_argument('--super-pin', dest='super_pin', default=os.environ.get('SUPER_PIN'))
+    ap.add_argument('--user'); ap.add_argument('--password', default=os.environ.get('NAS_PASSWORD'))
     a = ap.parse_args()
     user, pw = credentials(a)
     os.makedirs(a.tmp, exist_ok=True)

@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import org.murabbie.ahlalhadeeth.App
 import org.murabbie.ahlalhadeeth.data.ArabicText
-import org.murabbie.ahlalhadeeth.data.AutoIndexJob
 import org.murabbie.ahlalhadeeth.data.AutoIndexer
 import org.murabbie.ahlalhadeeth.data.Chapter
 import org.murabbie.ahlalhadeeth.data.Repository
@@ -48,28 +47,6 @@ import org.murabbie.ahlalhadeeth.data.autoIndexSummary
 import org.murabbie.ahlalhadeeth.ui.AppTopBar
 
 private fun pct(p: Float) = ArabicText.arabicDigits((p.coerceIn(0f, 1f) * 100).toInt()) + "٪"
-
-/** بطاقة تقدّم عملية التفريغ: شريط ونسبة مئوية والحالة، وأزرار الإيقاف/المتابعة */
-@Composable
-fun AutoIndexProgressCard(app: App, st: AutoIndexJob.State, nav: NavHostController?, modifier: Modifier = Modifier) {
-    Card(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (st.running) CircularProgressIndicator(Modifier.width(20.dp).height(20.dp), strokeWidth = 2.dp)
-                Text(autoIndexSummary(st), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                if (st.running) Text(pct(st.overall), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            }
-            LinearProgressIndicator(progress = { st.overall.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-            if (st.quotaStop && st.quotaMessage.isNotBlank()) Text(st.quotaMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (st.running) OutlinedButton(onClick = { app.autoIndex.cancel() }) { Text("إيقاف") }
-                else if (st.pendingCount > 0) Button(onClick = { app.autoIndex.resume() }) { Text("متابعة (${ArabicText.arabicDigits(st.pendingCount)})") }
-                if (!st.running && st.items.isNotEmpty()) TextButton(onClick = { app.autoIndex.clear() }) { Text("مسح") }
-                if (nav != null && st.items.isNotEmpty()) TextButton(onClick = { nav.navigate(org.murabbie.ahlalhadeeth.ui.Routes.autoBatch(st.sheekhId, st.bookId)) { launchSingleTop = true } }) { Text("التفاصيل") }
-            }
-        }
-    }
-}
 
 /**
  * الفهرسة والتفريغ التلقائيان لدرس واحد: تُنفَّذ عبر طابور التفريغ (تبقى بعد مغادرة الشاشة وتظهر نسبتها في الشريط السفلي)،

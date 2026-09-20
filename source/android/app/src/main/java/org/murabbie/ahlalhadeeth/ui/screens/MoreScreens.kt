@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -153,6 +152,10 @@ fun AboutScreen(app: App, repo: Repository, nav: NavHostController) {
             Text("المشايخ الذين تضمهم الموسوعة: الألباني، وابن باز، والعثيمين، والفوزان، وعبد المحسن العباد، وصالح آل الشيخ، ومحمد أمان الجامي، ومشهور حسن آل سلمان، ومحمد المختار الشنقيطي، ومنصور الخالدي.", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(12.dp))
             Text("الحقوق للقائمين على موقع أهل الحديث والأثر (ahl_alhadeeth@hotmail.com). الصوت يُبثّ من خادم الموقع http://www.alathar.net/files/sound/ ما لم يُغيَّر المصدر من الإعدادات.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (BuildConfig.PRIVACY_URL.isNotBlank()) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                androidx.compose.material3.TextButton(onClick = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(BuildConfig.PRIVACY_URL))) } }) { Text("سياسة الخصوصية") }
+            }
             Spacer(Modifier.height(12.dp))
             Text("الاستخدام على الجهاز:", style = MaterialTheme.typography.titleSmall)
             Text("• اضغط على أي مقطع لتشغيل الشريط من موضعه.\n• اضغط مطوّلًا على المقطع لعرض التفريغ أو إضافته للمفضلة أو نسخه.\n• من الإعدادات يمكنك تغيير مصدر الصوت (خادم أو مجلد على الجهاز) وتنزيل البيانات من جديد.", style = MaterialTheme.typography.bodyMedium)

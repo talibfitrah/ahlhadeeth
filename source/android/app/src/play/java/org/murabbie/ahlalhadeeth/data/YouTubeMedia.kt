@@ -14,7 +14,7 @@ object YouTubeMedia {
     const val QUALITY_VIDEO_SD = 1
     const val QUALITY_VIDEO_HD = 2
 
-    const val UNAVAILABLE = "نقل وسائط يوتيوب غير متاح في نسخة Google Play — استعمل نسخة التوزيع المباشر أو أداة yt2nas.py من حاسوب"
+    const val UNAVAILABLE = "نقل وسائط يوتيوب غير متاح في هذه النسخة"
 
     fun qualityLabel(q: Int): String = when (q) { QUALITY_VIDEO_SD -> "مرئية عادية (٣٦٠p)"; QUALITY_VIDEO_HD -> "مرئية عالية (حتى ١٠٨٠p)"; else -> "مسموعة فقط (صوت m4a)" }
 

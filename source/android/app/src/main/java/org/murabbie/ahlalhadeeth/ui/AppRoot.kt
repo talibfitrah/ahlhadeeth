@@ -1,5 +1,6 @@
 package org.murabbie.ahlalhadeeth.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AccountTree
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -39,6 +41,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
 import org.murabbie.ahlalhadeeth.App
+import org.murabbie.ahlalhadeeth.BuildConfig
 import org.murabbie.ahlalhadeeth.data.DataState
 import org.murabbie.ahlalhadeeth.data.Repository
 import org.murabbie.ahlalhadeeth.ui.screens.AboutScreen
@@ -150,7 +153,8 @@ fun AppRoot(app: App, pendingOpen: MutableState<String?>) {
     when (val s = dataState) {
         is DataState.Ready -> MainScaffold(app, s.repo, pendingOpen)
         // imePadding: على الأجهزة الحديثة (حافة إلى حافة) لا تُقلِّص النافذة نفسها عند ظهور لوحة المفاتيح، فتُطبَّق مسافتها هنا كي لا تغطي حقول الكتابة
-        else -> Box(Modifier.fillMaxSize().systemBarsPadding().imePadding()) { SetupScreen(app, dataState) }
+        // خلفية السمة صراحةً: خلفية النافذة فاتحة دائمًا، فبدونها يظهر نص الوضع الداكن الفاتح على خلفية فاتحة
+        else -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).systemBarsPadding().imePadding()) { SetupScreen(app, dataState) }
     }
 }
 
@@ -171,7 +175,7 @@ fun MainScaffold(app: App, repo: Repository, pendingOpen: MutableState<String?>)
         when (pendingOpen.value) {
             "player" -> nav.navigate(Routes.PLAYER) { launchSingleTop = true }
             "downloads" -> nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true }
-            "transfer" -> { val t = app.transfer.state.value; nav.navigate(Routes.transfer(t.sheekhId, t.bookId)) { launchSingleTop = true } }
+            "transfer" -> if (BuildConfig.DISTRIBUTION != "play") { val t = app.transfer.state.value; nav.navigate(Routes.transfer(t.sheekhId, t.bookId)) { launchSingleTop = true } }
             "autoindex" -> { val t = app.autoIndex.state.value; nav.navigate(Routes.autoBatch(t.sheekhId, t.bookId)) { launchSingleTop = true } }
         }
         pendingOpen.value = null

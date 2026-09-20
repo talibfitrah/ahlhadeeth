@@ -97,15 +97,10 @@ class UserDb(context: Context) {
         db.exec("INSERT INTO word(text, used_at, count) VALUES (?,?,1) ON CONFLICT(text) DO UPDATE SET used_at = excluded.used_at, count = count + 1", t, System.currentTimeMillis())
     }
 
-    suspend fun removeWord(text: String) = db.exec("DELETE FROM word WHERE text = ?", text)
-    suspend fun clearWords() = db.exec("DELETE FROM word")
-
     // ---------- سجل الاستماع ----------
     suspend fun savePosition(code: Int, positionMs: Long, durationMs: Long) {
         db.exec("INSERT OR REPLACE INTO history VALUES (?,?,?,?)", code, positionMs, durationMs, System.currentTimeMillis())
     }
-
-    suspend fun position(code: Int): Long = db.queryOne("SELECT position_ms FROM history WHERE code = ?", code) { it.long(0) } ?: 0L
 
     suspend fun history(limit: Int = 100): List<HistoryEntry> =
         db.query("SELECT code, position_ms, duration_ms, played_at FROM history ORDER BY played_at DESC LIMIT ?", limit) {
@@ -155,6 +150,4 @@ class UserDb(context: Context) {
 
     suspend fun nextPendingDownload(): DownloadEntry? =
         db.queryOne("SELECT $dlCols FROM download WHERE state = 0 ORDER BY added_at LIMIT 1") { downloadOf(it) }
-
-    fun bumpDownloads() { _downloadsVersion.value++ }
 }

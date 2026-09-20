@@ -21,8 +21,8 @@ android {
         applicationId = "org.murabbie.ahlalhadeeth"
         minSdk = 24
         targetSdk = 35
-        versionCode = 18
-        versionName = "1.7.7"
+        versionCode = 19
+        versionName = "1.7.8"
         vectorDrawables.useSupportLibrary = true
         // رابط manifest الافتراضي على NAS (يمكن تغييره من الإعدادات)
         buildConfigField("String", "DEFAULT_MANIFEST_URL", "\"${project.findProperty("manifestUrl") ?: "https://files.murabbie.org/fsdownload/MANIFEST_ID/manifest.json"}\"")
@@ -34,6 +34,8 @@ android {
         buildConfigField("String", "DEFAULT_SHARED_URL", "\"${project.findProperty("sharedUrl") ?: "https://files.murabbie.org/fsdownload/SHARED_ID/shared-content.json"}\"")
         // ملف المشرفين (المشرف العام والمشرفون وأرقامهم السرية) — رابط مشاركة دائم
         buildConfigField("String", "DEFAULT_ADMINS_URL", "\"${project.findProperty("adminsUrl") ?: "https://files.murabbie.org/fsdownload/ADMINS_ID/admins.json"}\"")
+        // رابط سياسة الخصوصية العام (-PprivacyUrl): يشترط Play أن يكون داخل التطبيق أيضًا؛ يظهر في «عن البرنامج» إن ضُبط
+        buildConfigField("String", "PRIVACY_URL", "\"${project.findProperty("privacyUrl") ?: ""}\"")
         buildConfigField("String", "DEFAULT_NAS_API", "\"https://files.murabbie.org/webapi\"")
         buildConfigField("String", "DEFAULT_SHARED_PATH", "\"/downloads/ahl-alhadeeth\"")
     }
@@ -113,7 +115,6 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.foundation:foundation")
@@ -137,7 +138,4 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
-
-    debugImplementation("androidx.compose.ui:ui-tooling")
 }

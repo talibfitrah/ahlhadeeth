@@ -55,7 +55,6 @@ import kotlinx.coroutines.launch
 import org.murabbie.ahlalhadeeth.App
 import org.murabbie.ahlalhadeeth.data.AdminCrypto
 import org.murabbie.ahlalhadeeth.data.AdminRegistry
-import org.murabbie.ahlalhadeeth.data.ArabicText
 import org.murabbie.ahlalhadeeth.data.Repository
 import org.murabbie.ahlalhadeeth.ui.AppTopBar
 import org.murabbie.ahlalhadeeth.ui.ConfirmCard
@@ -72,7 +71,7 @@ fun AdminsScreen(app: App, repo: Repository, nav: NavHostController) {
     var addName by remember { mutableStateOf("") }
     var addUser by remember { mutableStateOf("") }
     var userEdited by remember { mutableStateOf(false) }
-    var addPin by remember { mutableStateOf(AdminCrypto.randomPin(8)) }
+    var addPin by remember { mutableStateOf(AdminCrypto.randomPin()) }
     var reveal by remember { mutableStateOf<Triple<String, String, String>?>(null) } // name, user, pin
     var confirmRemove by remember { mutableStateOf<AdminRegistry.Entry?>(null) }
     var confirmReset by remember { mutableStateOf<AdminRegistry.Entry?>(null) }
@@ -93,23 +92,24 @@ fun AdminsScreen(app: App, repo: Repository, nav: NavHostController) {
     LaunchedEffect(Unit) { reload() }
     LaunchedEffect(sync.isSuper) { if (!sync.isSuper) nav.popBackStack() }
 
+    // الرقم السري حروف وأرقام لاتينية: يُعرض كما هو بلا تحويل إلى أرقام هندية
     fun shareText(name: String, user: String, pin: String) =
-        "تطبيق أهل الحديث والأثر — بيانات دخول المشرف\nالاسم: $name\nاسم المستخدم: $user\nالرقم السري: ${ArabicText.arabicDigits(pin)}\nالدخول من: المزيد ← المحتوى المضاف ← تسجيل دخول مشرف"
+        "تطبيق أهل الحديث والأثر — بيانات دخول المشرف\nالاسم: $name\nاسم المستخدم: $user\nالرقم السري: $pin\nالدخول من: المزيد ← المحتوى المضاف ← تسجيل دخول مشرف"
 
     Scaffold(
         topBar = { AppTopBar("المشرفون", nav, subtitle = "المشرف العام: ${sync.adminName}") },
-        floatingActionButton = { ExtendedFloatingActionButton(onClick = { addName = ""; addUser = ""; userEdited = false; addPin = AdminCrypto.randomPin(8); showAdd = true }) { Text("+ مشرف") } },
+        floatingActionButton = { ExtendedFloatingActionButton(onClick = { addName = ""; addUser = ""; userEdited = false; addPin = AdminCrypto.randomPin(); showAdd = true }) { Text("+ مشرف") } },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(scroll).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // ---- نماذج داخل الشاشة ----
             if (showAdd) InlineFormCard("تسجيل مشرف", onDismiss = { showAdd = false }) {
                 OutlinedTextField(value = addName, onValueChange = { addName = it; if (!userEdited) addUser = it.filter { c -> !c.isWhitespace() } }, label = { Text("الاسم") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = addUser, onValueChange = { addUser = it.filter { c -> !c.isWhitespace() }; userEdited = true }, label = { Text("اسم المستخدم (بلا فراغات)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = addPin, onValueChange = { addPin = it.filter { c -> c.isDigit() } }, label = { Text("الرقم السري (أرقام فقط)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    trailingIcon = { TextButton(onClick = { addPin = AdminCrypto.randomPin(8) }) { Text("توليد") } })
+                OutlinedTextField(value = addPin, onValueChange = { addPin = it }, label = { Text("الرقم السري (١٢ خانة على الأقل، حروف وأرقام)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), // بلا تصحيح تلقائي ولا حرف كبير تلقائي (الحروف حساسة لحالتها)
+                    trailingIcon = { TextButton(onClick = { addPin = AdminCrypto.randomPin() }) { Text("توليد") } })
                 Text("سيظهر الرقم السري بعد الحفظ لتبلّغه للمشرف.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    androidx.compose.material3.Button(enabled = !sync.busy && addName.isNotBlank() && addUser.isNotBlank() && AdminCrypto.normalizePin(addPin).length >= 4, onClick = {
+                    androidx.compose.material3.Button(enabled = !sync.busy && addName.isNotBlank() && addUser.isNotBlank() && AdminCrypto.normalizePin(addPin).length >= AdminCrypto.MIN_PIN, onClick = {
                         val n = addName.trim(); val u = addUser.trim(); val p = addPin
                         showAdd = false
                         scope.launch { runCatching { app.sharedSync.addAdmin(n, u, p) }.onSuccess { pin -> reveal = Triple(n, u, pin); reload() }.onFailure { error = it.message } }
@@ -123,7 +123,7 @@ fun AdminsScreen(app: App, repo: Repository, nav: NavHostController) {
                     SelectionContainer {
                         Column {
                             Text("اسم المستخدم: $u", style = MaterialTheme.typography.titleMedium)
-                            Text("الرقم السري: ${ArabicText.arabicDigits(p)}", style = MaterialTheme.typography.titleLarge.copy(fontSize = 26.sp), color = MaterialTheme.colorScheme.primary)
+                            Text("الرقم السري: $p", style = MaterialTheme.typography.titleLarge.copy(fontSize = 26.sp), color = MaterialTheme.colorScheme.primary)
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -148,18 +148,19 @@ fun AdminsScreen(app: App, repo: Repository, nav: NavHostController) {
                     scope.launch { runCatching { app.sharedSync.removeAdmin(e.user) }.onFailure { error = it.message }; reload() }
                 }, onDismiss = { confirmRemove = null }, destructive = true)
             }
-            if (showServer) InlineFormCard("مفاتيح الخادم والذكاء الاصطناعي", onDismiss = { showServer = false }) {
+            // تُمحى كلمة سر الخادم ومفتاح Gemini من حالة الشاشة عند الحفظ والإلغاء والإغلاق
+            if (showServer) InlineFormCard("مفاتيح الخادم والذكاء الاصطناعي", onDismiss = { showServer = false; serverUser = ""; serverPass = ""; geminiKey = "" }) {
                 Text("حساب خادم البيانات (NAS) الذي يرفع به التطبيق ملفات النشر، ومفتاح Gemini (اختياري) للتفريغ والفهرسة التلقائيين. بعد الحفظ يحتاج كل المشرفين إلى أرقام سرية جديدة (زر المفتاح أمام كل مشرف).", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(value = serverUser, onValueChange = { serverUser = it }, label = { Text("اسم مستخدم الخادم") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = serverPass, onValueChange = { serverPass = it }, label = { Text("كلمة سر الخادم") }, singleLine = true, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-                OutlinedTextField(value = geminiKey, onValueChange = { geminiKey = it.trim() }, label = { Text("مفتاح Gemini API (اختياري)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = geminiKey, onValueChange = { geminiKey = it.trim() }, label = { Text("مفتاح Gemini API (اختياري)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
                 Text("يُحصل على مفتاح Gemini مجانًا من Google AI Studio (aistudio.google.com ← Get API key). بدونه تعمل فهرسة دروس يوتيوب باستنباط آلي مبسط، ولا يعمل تفريغ الملفات الصوتية.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     androidx.compose.material3.Button(enabled = !sync.busy && serverUser.isNotBlank() && serverPass.isNotBlank(), onClick = {
-                        val u = serverUser; val p = serverPass; val g = geminiKey; showServer = false
+                        val u = serverUser; val p = serverPass; val g = geminiKey; showServer = false; serverUser = ""; serverPass = ""; geminiKey = ""
                         scope.launch { runCatching { app.sharedSync.changeServerAccount(u, p, g) }.onSuccess { error = null }.onFailure { error = it.message }; reload() }
                     }) { Text("حفظ المفاتيح") }
-                    OutlinedButton(onClick = { showServer = false }) { Text("إلغاء") }
+                    OutlinedButton(onClick = { showServer = false; serverUser = ""; serverPass = ""; geminiKey = "" }) { Text("إلغاء") }
                 }
             }
             Card(Modifier.fillMaxWidth()) {

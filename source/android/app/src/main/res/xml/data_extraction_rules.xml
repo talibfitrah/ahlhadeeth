@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
-    <cloud-backup><exclude domain="root" /></cloud-backup>
-    <device-transfer><exclude domain="root" /></device-transfer>
+    <!-- لا نسخ احتياطي ولا نقل بين الأجهزة: shared_prefs تحوي حساب الخادم ومفتاح Gemini مفكوكَين عند المشرف، وكل نطاق يُستثنى صراحةً -->
+    <cloud-backup>
+        <exclude domain="root" path="." /><exclude domain="file" path="." /><exclude domain="database" path="." /><exclude domain="sharedpref" path="." /><exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." /><exclude domain="file" path="." /><exclude domain="database" path="." /><exclude domain="sharedpref" path="." /><exclude domain="external" path="." />
+    </device-transfer>
 </data-extraction-rules>

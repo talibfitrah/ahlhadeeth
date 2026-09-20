@@ -8,6 +8,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -80,7 +81,7 @@ class SharedSync(context: Context, private val content: UserContent) {
         return if (l.size >= 2 && l[0].isNotBlank()) l[0] to l[1] else null
     }
     /** مفتاح Gemini (للتفريغ والفهرسة التلقائيين) إن ضبطه المشرف العام */
-    fun geminiKey(): String? = credentialLines().getOrNull(2)?.trim()?.ifBlank { null }
+    fun geminiKey(): String? = credentialLines().getOrNull(2)?.filter { it in '!'..'~' }?.ifBlank { null } // يُرسل ترويسة HTTP: علامة اتجاه ملصوقة معه تُسقط الطلب
     val hasGemini: Boolean get() = geminiKey() != null
     /** (اسم مستخدم الخادم، كلمة سره، مفتاح Gemini) — للمشرف العام لتعبئة نموذج المفاتيح */
     fun credentialParts(): Triple<String, String, String> { val l = credentialLines(); return Triple(l.getOrElse(0) { "" }, l.getOrElse(1) { "" }, l.getOrElse(2) { "" }) }
@@ -89,9 +90,12 @@ class SharedSync(context: Context, private val content: UserContent) {
     /** تحديث الإعدادات من manifest (إن وُجدت فيه) */
     fun applyManifest(o: JSONObject?) {
         val sh = o?.optJSONObject("shared") ?: return
-        val url = sh.optString("url", "")
-        val adminsUrl = sh.optString("admins_url", "")
-        val api = sh.optString("api", "")
+        // apiBase يستقبل اسم مستخدم الخادم وكلمة سره، وadmins_url مصدر المفاتيح المغلَّفة: لا تُقبل من manifest إلا https وعلى مضيف الخادم المضمَّن نفسه
+        val host = BuildConfig.DEFAULT_NAS_API.toHttpUrl().host
+        fun trusted(u: String) = if (u.startsWith("https://") && u.toHttpUrlOrNull()?.host == host) u else ""
+        val url = trusted(sh.optString("url", ""))
+        val adminsUrl = trusted(sh.optString("admins_url", ""))
+        val api = trusted(sh.optString("api", ""))
         val path = sh.optString("path", "")
         prefs.edit().apply {
             if (url.isNotBlank()) putString("sharedUrl", url)
@@ -165,7 +169,7 @@ class SharedSync(context: Context, private val content: UserContent) {
     suspend fun addAdmin(name: String, user: String, pin: String = ""): String = busyOp {
         requireSuper()
         val reg = verifyAccess()
-        val p = pin.ifBlank { AdminCrypto.randomPin(8) }
+        val p = pin.ifBlank { AdminCrypto.randomPin() }
         val cred = prefs.getString("credential", "") ?: ""
         withContext(Dispatchers.Default) { reg.addAdmin(name, user, p, cred, _state.value.adminUser) }
         saveAdmins(reg)
@@ -176,7 +180,7 @@ class SharedSync(context: Context, private val content: UserContent) {
     suspend fun resetPin(user: String, pin: String = ""): String = busyOp {
         requireSuper()
         val reg = verifyAccess()
-        val p = pin.ifBlank { AdminCrypto.randomPin(8) }
+        val p = pin.ifBlank { AdminCrypto.randomPin() }
         val cred = prefs.getString("credential", "") ?: ""
         withContext(Dispatchers.Default) { reg.setPin(user, p, cred) }
         saveAdmins(reg)
@@ -196,14 +200,6 @@ class SharedSync(context: Context, private val content: UserContent) {
         val reg = verifyAccess()
         reg.remove(user)
         saveAdmins(reg)
-    }
-
-    suspend fun renameAdmin(user: String, name: String) = busyOp {
-        requireSuper()
-        val reg = verifyAccess()
-        reg.rename(user, name)
-        saveAdmins(reg)
-        if (user == _state.value.adminUser) { prefs.edit().putString("adminName", name).apply(); _state.value = _state.value.copy(adminName = name) }
     }
 
     /** المشرف (أو المشرف العام) يغيّر رقمه السري */
@@ -395,7 +391,8 @@ class SharedSync(context: Context, private val content: UserContent) {
         try {
             val text = NasHttp.fetchText(url)
             val hash = sha256(text)
-            val o = runCatching { JSONObject(text) }.getOrNull() ?: throw IllegalStateException("ملف المحتوى المشترك غير صالح")
+            // خطأ DSM يصل JSON صالحًا بحالة 200: نتحقق من الصيغة قبل حفظ شواهد الحذف حتى لا تُمحى بردٍّ ليس حزمة
+            val o = runCatching { JSONObject(text) }.getOrNull()?.takeIf { it.optString("format") == "ahl-alhadeeth-pack" } ?: throw IllegalStateException("ملف المحتوى المشترك غير صالح")
             serverRemoved = o.optJSONArray("removed")?.let { arr -> (0 until arr.length()).map { arr.optString(it) } }?.filter { it.isNotBlank() } ?: emptyList()
             prefs.edit().putString("serverRemoved", JSONArray(serverRemoved).toString()).apply()
             val unchanged = hash == (prefs.getString("lastHash", "") ?: "")
@@ -411,8 +408,14 @@ class SharedSync(context: Context, private val content: UserContent) {
 
     // ---------- النشر (المشرفون) ----------
 
-    /** دمج آخر نسخة من الخادم مع تغييرات المشرف ثم رفعها */
+    private class StaleShared : Exception("نشر مشرف آخر قبل لحظات؛ أعد النشر ليُدمج عمله")
+
+    /** دمج آخر نسخة من الخادم مع تغييرات المشرف ثم رفعها؛ إن نشر مشرف آخر بين الجلب والرفع أُعيد الجلب والدمج (مرة واحدة) */
     suspend fun publish(): String {
+        return try { publishOnce() } catch (e: StaleShared) { publishOnce() }
+    }
+
+    private suspend fun publishOnce(): String {
         if (!isAdmin) throw NasError(400, "لم يُسجَّل دخول مشرف")
         _state.value = _state.value.copy(busy = true, message = "")
         try {
@@ -428,13 +431,17 @@ class SharedSync(context: Context, private val content: UserContent) {
             _state.value = _state.value.copy(busy = true)
             try {
                 val (dirty, removedLocal) = content.pendingCounts()
-                val removed = (serverRemoved + content.removedKeys()).distinct()
+                val removedSent = content.markPublishing()
+                val removed = (serverRemoved + removedSent).distinct()
                 val json = content.exportPack(
                     null, "المحتوى المشترك — أهل الحديث والأثر", removed,
                     extra = mapOf("id" to "shared-content", "updated" to System.currentTimeMillis(), "published_by" to _state.value.adminUser, "pack_version" to (System.currentTimeMillis() / 1000).toInt())
                 )
+                // لا خادم وسيط يمنع تزامن مشرفَين؛ نضيّق النافذة: إن تغيّر الملف منذ الجلب قبل لحظات لا نرفع فوقه بل نعيد الجلب والدمج
+                if (sha256(NasHttp.fetchText(_state.value.sharedUrl)) != (prefs.getString("lastHash", "") ?: "")) throw StaleShared()
                 upload(json.toByteArray(Charsets.UTF_8), _state.value.sharedName)
-                content.markAllClean()
+                // تعديل جرى أثناء الرفع (فهرسة/تفريغ آلي) لم يدخل الملف المرفوع: يبقى درسه وحده معلَّقًا ليغلب محليًا ويُنشر لاحقًا
+                content.markPublished(removedSent)
                 content.markAllShared()
                 serverRemoved = removed
                 val now = System.currentTimeMillis()

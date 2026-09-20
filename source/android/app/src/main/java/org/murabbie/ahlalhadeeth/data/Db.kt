@@ -60,26 +60,6 @@ class Db(path: String, readOnly: Boolean) : AutoCloseable {
         }
     }
 
-    suspend fun <T> transaction(block: suspend () -> T): T = withContext(Dispatchers.IO) {
-        mutex.withLock { conn.execSQL("BEGIN") }
-        try {
-            val r = block()
-            mutex.withLock { conn.execSQL("COMMIT") }
-            r
-        } catch (e: Throwable) {
-            mutex.withLock { runCatching { conn.execSQL("ROLLBACK") } }
-            throw e
-        }
-    }
-
-    /** تنفيذ بلا قفل (للاستخدام داخل transaction فقط). */
-    suspend fun execNoLock(sql: String, vararg args: Any?) = withContext(Dispatchers.IO) {
-        conn.prepare(sql).use { st ->
-            bind(st, args)
-            while (st.step()) { }
-        }
-    }
-
     private fun bind(st: SQLiteStatement, args: Array<out Any?>) {
         args.forEachIndexed { i, a ->
             val idx = i + 1

@@ -21,9 +21,6 @@ class Repository(private val db: Db, val dbFile: File) {
         if (id < 0) user?.sheekh(-id)
         else db.queryOne("SELECT id, name, is_default, ord FROM sheekh WHERE id = ?", id) { Sheekh(it.int(0), it.text(1), it.bool(2), it.int(3)) }
 
-    suspend fun types(): List<BookType> =
-        db.query("SELECT id, name, ord FROM type ORDER BY ord, id") { BookType(it.int(0), it.text(1), it.int(2)) }
-
     suspend fun books(): List<Book> {
         val main = db.query("SELECT b.id, b.name, b.ord, b.type_id, IFNULL(t.name,'') FROM book b LEFT JOIN type t ON t.id = b.type_id ORDER BY t.ord, b.ord, b.name") {
             Book(it.int(0), it.text(1), it.int(2), it.int(3), it.text(4))
@@ -48,12 +45,6 @@ class Repository(private val db: Db, val dbFile: File) {
                WHERE c.sheekh_id = ?
                GROUP BY b.id ORDER BY t.ord, b.ord, b.name""", sheekhId
         ) { SheekhBook(Book(it.int(0), it.text(1), it.int(2), it.int(3), it.text(4)), sheekhId, it.int(5), it.int(6)) }
-
-    /** الشيوخ الذين لهم أشرطة في كتاب معيّن */
-    suspend fun sheekhsOfBook(bookId: Int): List<Sheekh> =
-        db.query("SELECT DISTINCT s.id, s.name, s.is_default, s.ord FROM chapter c JOIN sheekh s ON s.id = c.sheekh_id WHERE c.book_id = ? ORDER BY s.ord", bookId) {
-            Sheekh(it.int(0), it.text(1), it.bool(2), it.int(3))
-        }
 
     // ---------- الأشرطة ----------
 
@@ -120,10 +111,6 @@ class Repository(private val db: Db, val dbFile: File) {
     suspend fun writesOfChapter(code: Int): Map<Long, String> =
         if (code < 0) (user?.writesOfChapter(-code) ?: emptyMap())
         else db.query("SELECT id, write FROM content WHERE code = ? AND write IS NOT NULL ORDER BY seq", code) { it.long(0) to it.text(1) }.toMap()
-
-    /** عدد الأشرطة التي فيها تفريغ لكتاب معيّن */
-    suspend fun chaptersWithWrite(sheekhId: Int, bookId: Int): Int =
-        db.count("SELECT COUNT(*) FROM chapter WHERE sheekh_id = ? AND book_id = ? AND write_count > 0", sheekhId, bookId).toInt()
 
     suspend fun segmentsByIds(ids: Collection<Long>): Map<Long, Segment> {
         if (ids.isEmpty()) return emptyMap()

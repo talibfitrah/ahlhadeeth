@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """توليد manifest.json لتطبيق أهل الحديث والأثر من روابط المشاركة وملف SHA256SUMS."""
-import json, os, sys
+import json, os
 BUILD = '/home/claude/alathar/build'
 NAS_AUDIO_TEMPLATE = 'https://files.murabbie.org/webapi/entry.cgi?api=SYNO.FolderSharing.Download&version=2&method=download&mode=open&_sharing_id=ehniFEwJg&path=%5B%22%2Fdownloads%2Fahl-alhadeeth%2Fsound%2F{path}%22%5D'
 sums = {}
@@ -23,8 +23,8 @@ manifest = {
     'name': 'أهل الحديث والأثر',
     'updated': __import__('time').strftime('%Y-%m-%d'),
     'app': {
-        'version_code': int(os.environ.get('APP_VERSION_CODE', '1')),
-        'version_name': os.environ.get('APP_VERSION_NAME', '1.0.0'),
+        'version_code': int(os.environ['APP_VERSION_CODE']),
+        'version_name': os.environ['APP_VERSION_NAME'],
         'apk': apk,
         'apk_page': apk_page,
         'notes': os.environ.get('APP_NOTES', ''),

@@ -41,7 +41,6 @@ object YouTube {
     fun isYouTubeUrl(url: String?): Boolean = extractId(url) != null || (url?.contains("youtu", true) == true && extractPlaylistId(url) != null)
 
     fun watchUrl(id: String) = "https://www.youtube.com/watch?v=$id"
-    fun thumbnail(id: String) = "https://i.ytimg.com/vi/$id/hqdefault.jpg"
 
     /** عنوان الفيديو عبر oEmbed؛ يعيد null عند الفشل */
     suspend fun fetchTitle(id: String): String? = fetchInfo(watchUrl(id))?.first
@@ -164,6 +163,8 @@ object YouTube {
      * يرمي CaptionsUnavailable إن لم توجد ترجمة، أو IOException عند تعذر الوصول.
      */
     suspend fun fetchCaptions(videoId: String, onStatus: (String) -> Unit = {}): CaptionResult = withContext(Dispatchers.IO) {
+        // نسخة المتجر لا تستعمل واجهة يوتيوب الداخلية غير الموثَّقة (youtubei/timedtext بعميل منتحَل): مخالفة لشروط يوتيوب
+        if (org.murabbie.ahlalhadeeth.BuildConfig.DISTRIBUTION == "play") throw IllegalStateException("غير متاح في هذه النسخة")
         onStatus("الاتصال بيوتيوب…")
         var pr = runCatching { playerResponse(videoId) }.getOrNull()
         var tracks = pr?.let { tracksOf(it) } ?: emptyList()
@@ -266,6 +267,8 @@ object YouTube {
      * يرمي استثناءً عند الفشل ليُستعمل المشغّل المخفي بديلًا.
      */
     suspend fun fetchPlaylist(playlistId: String, onProgress: (Int) -> Unit = {}): PlaylistInfo = withContext(Dispatchers.IO) {
+        // نسخة المتجر لا تستعمل واجهة يوتيوب الداخلية غير الموثَّقة (youtubei/timedtext بعميل منتحَل): مخالفة لشروط يوتيوب
+        if (org.murabbie.ahlalhadeeth.BuildConfig.DISTRIBUTION == "play") throw IllegalStateException("غير متاح في هذه النسخة")
         val ctx = JSONObject().put("context", JSONObject().put("client", JSONObject().put("clientName", "WEB").put("clientVersion", "2.20250101.00.00").put("hl", "ar")))
         val first = browse(JSONObject(ctx.toString()).put("browseId", "VL$playlistId"))
         val title = first.optJSONObject("microformat")?.optJSONObject("microformatDataRenderer")?.optString("title") ?: ""

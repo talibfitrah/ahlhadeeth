@@ -7,15 +7,17 @@
   wrapped = base64(iv ‖ AES-256-GCM(HMAC-SHA256(key, b"enc"), iv, "user\\npass"))
 
 الاستعمال:
-  admins_tool.py init  OUT.json --super-user admin --super-name "المشرف العام" --super-pin 12345678 --nas-user manus --nas-pass '...'
-  admins_tool.py add   FILE.json --user ahmad --name "أحمد" --pin 87654321 --super-pin 12345678
-  admins_tool.py check FILE.json --user admin --pin 12345678        # يتحقق من الرقم ويطبع مفتاح الخادم
+  admins_tool.py init  OUT.json --super-user admin --super-name "المشرف العام" --super-pin SUPER-SECRET --nas-user manus --nas-pass '...'
+  admins_tool.py add   FILE.json --user ahmad --name "أحمد" --pin ADMIN-SECRET --super-pin SUPER-SECRET
+  admins_tool.py check FILE.json --user admin --pin SUPER-SECRET        # يتحقق من الرقم ويطبع مفتاح الخادم
   admins_tool.py list  FILE.json
+الرقم السري الجديد ١٢ خانة على الأقل (حروف وأرقام)؛ الأرقام القديمة الأقصر تبقى صالحة في check و --super-pin.
 """
-import argparse, base64, hashlib, hmac, json, os, secrets, sys, time
+import argparse, base64, hashlib, hmac, json, secrets, time
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 ITER = 100_000
+MIN_PIN = 12  # مطابق لـ AdminCrypto.MIN_PIN: الملف عام فالرقم القصير يُكسر بالتجربة
 
 
 def norm_pin(pin):
@@ -54,8 +56,8 @@ def unwrap(key, wrapped):
 
 def set_secret(obj, pin, credential, iterations=ITER):
     p = norm_pin(pin)
-    if len(p) < 4:
-        raise SystemExit('الرقم السري قصير')
+    if len(p) < MIN_PIN:
+        raise SystemExit('الرقم السري قصير (١٢ خانة على الأقل)')
     salt = secrets.token_bytes(16)
     key = derive(p, salt, iterations)
     obj.update(salt=base64.b64encode(salt).decode(), hash=verifier(key), wrapped=wrap(key, credential), updated=int(time.time() * 1000))
@@ -71,6 +73,11 @@ def load(path):
 def save(path, o):
     o['updated'] = int(time.time() * 1000)
     json.dump(o, open(path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+
+
+def iters(o):
+    # لا نقبل من الملف عدد دورات أقل من الافتراضي (مطابق لـ AdminRegistry.iterations في التطبيق)
+    return max(int(o.get('kdf', {}).get('iterations', ITER)), ITER)
 
 
 def find(o, user):
@@ -101,14 +108,14 @@ def main():
     elif a.cmd == 'add':
         o = load(a.file)
         s = o['super']
-        key = derive(a.super_pin, base64.b64decode(s['salt']), o['kdf']['iterations'])
+        key = derive(a.super_pin, base64.b64decode(s['salt']), iters(o))
         if verifier(key) != s['hash']:
             raise SystemExit('رقم المشرف العام غير صحيح')
         cred = unwrap(key, s['wrapped'])
         if find(o, a.user):
             raise SystemExit('اسم المستخدم مستعمل')
         entry = {'user': a.user, 'name': a.name, 'active': True, 'created': int(time.time() * 1000), 'created_by': s['user']}
-        set_secret(entry, a.pin, cred, o['kdf']['iterations'])
+        set_secret(entry, a.pin, cred, iters(o))
         o['admins'].append(entry)
         save(a.file, o)
         print('added', a.user)
@@ -117,7 +124,7 @@ def main():
         e = find(o, a.user)
         if not e:
             raise SystemExit('لا يوجد')
-        key = derive(a.pin, base64.b64decode(e['salt']), o['kdf']['iterations'])
+        key = derive(a.pin, base64.b64decode(e['salt']), iters(o))
         ok = verifier(key) == e['hash']
         print('pin ok:', ok)
         if ok:

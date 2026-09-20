@@ -52,7 +52,7 @@ object ArabicText {
 
     /** كلمات الاستعلام بعد التطبيع. */
     fun queryWords(query: String): List<String> =
-        normalize(query).split(wordSplit).map { it.trim() }.filter { it.isNotEmpty() }
+        normalize(query).split(wordSplit).map { it.trim() }.filter { it.any(Char::isLetterOrDigit) } // رمز منفرد مثل ﴿ يطابق كل شيء عبر «ال*»
 
     /** الأرقام الهندية للعرض. */
     fun arabicDigits(n: Long): String {

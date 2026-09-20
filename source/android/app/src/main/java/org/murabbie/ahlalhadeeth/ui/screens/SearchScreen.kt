@@ -52,7 +52,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.murabbie.ahlalhadeeth.App
 import org.murabbie.ahlalhadeeth.data.ArabicText
@@ -85,6 +84,8 @@ class SearchViewModel : ViewModel() {
     private var job: Job? = null
     private val pageSize = 200
 
+    private var mainOffset = 0 // إزاحة قاعدة المحتوى (نتائج المحتوى المضاف تُلحق بالصفحة الأولى فلا يصلح حجم القائمة إزاحةً)
+
     private fun options(offset: Int) = SearchOptions(
         query = query.value, matchAll = matchAll.value, inLine = inLine.value || !inWrite.value, inWrite = inWrite.value,
         exactPhrase = exact.value, sheekhIds = sheekhIds.value, bookIds = bookIds.value, questionsOnly = questionsOnly.value,
@@ -108,8 +109,11 @@ class SearchViewModel : ViewModel() {
                 } else {
                     val opts = options(0)
                     results.value = repo.search(opts)
+                    mainOffset = pageSize
                     total.value = repo.searchCount(opts)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // بحث جديد ألغى هذا: لا نعرض خطأ ولا نمسح نتائج البحث الجديد
             } catch (e: Exception) {
                 error.value = "خطأ في البحث: ${e.message}"
                 results.value = emptyList()
@@ -125,8 +129,12 @@ class SearchViewModel : ViewModel() {
         job = viewModelScope.launch {
             searching.value = true
             try {
-                val more = repo.search(options(cur.size))
+                val more = repo.search(options(mainOffset))
+                mainOffset += pageSize
                 results.value = cur + more
+                if (more.isEmpty()) total.value = cur.size.toLong() // لا مزيد: نوقف طلب الصفحات
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 error.value = e.message
             } finally {

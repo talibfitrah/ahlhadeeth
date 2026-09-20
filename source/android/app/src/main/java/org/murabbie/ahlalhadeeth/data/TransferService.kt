@@ -26,6 +26,7 @@ class TransferService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var tracker: Job? = null
+    private var noFgs = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -34,11 +35,13 @@ class TransferService : Service() {
         val n = build("نقل الدروس إلى الخادم…", -1f)
         // API 34+: specialUse (بلا مهلة نظام)؛ قبله dataSync
         val type = if (Build.VERSION.SDK_INT >= 34 && org.murabbie.ahlalhadeeth.BuildConfig.DISTRIBUTION != "play") ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceCompat.startForeground(this, NOTIF_ID, n, type) else startForeground(NOTIF_ID, n)
+        // أندرويد ١٥+ مع dataSync (نسخة المتجر): بعد نفاد مهلة النظام اليومية يرمي startForeground استثناءً — تُوقف الخدمة بدل انهيار التطبيق، والنقل يستمر داخل التطبيق
+        runCatching { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceCompat.startForeground(this, NOTIF_ID, n, type) else startForeground(NOTIF_ID, n) }.onFailure { noFgs = true; stopSelf() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { App.instance.transfer.cancel(); finish(); return START_NOT_STICKY }
+        if (noFgs) return START_NOT_STICKY // لا خدمة أمامية: لا إشعار جارٍ يبقى عالقًا بعد إيقافها
         if (tracker?.isActive != true) tracker = scope.launch {
             val job = App.instance.transfer
             var last = ""

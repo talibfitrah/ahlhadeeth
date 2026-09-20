@@ -2,8 +2,6 @@ package org.murabbie.ahlalhadeeth.data
 
 data class Sheekh(val id: Int, val name: String, val isDefault: Boolean, val ord: Int)
 
-data class BookType(val id: Int, val name: String, val ord: Int)
-
 data class Book(val id: Int, val name: String, val ord: Int, val typeId: Int, val typeName: String = "")
 
 /** كتاب مع عدد أشرطته عند شيخ معيّن */

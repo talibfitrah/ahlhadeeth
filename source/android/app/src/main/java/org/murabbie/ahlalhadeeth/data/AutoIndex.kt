@@ -10,7 +10,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.update
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
@@ -179,14 +178,14 @@ class GeminiClient(private val apiKey: String, var model: String = MODELS.first(
             if (json) gen.put("responseMimeType", "application/json")
             if (json && schema != null) gen.put("responseSchema", schema) // مخرجات منظَّمة: JSON صالح دائمًا
             val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", parts))).put("generationConfig", gen)
-            val method = if (onPartial != null) "streamGenerateContent?alt=sse&" else "generateContent?"
-            val req = Request.Builder().url("$base/v1beta/models/$model:${method}key=$apiKey")
+            val method = if (onPartial != null) "streamGenerateContent?alt=sse" else "generateContent"
+            val req = Request.Builder().url("$base/v1beta/models/$model:$method").header("x-goog-api-key", apiKey) // المفتاح في ترويسة لا في الرابط حتى لا يظهر في السجلات
                 .post(body.toString().toByteArray().toRequestBody("application/json".toMediaType())).build()
             try {
                 client.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) { val text = resp.body?.string() ?: ""; throw GeminiError(resp.code, errorMessage(resp.code, text)) }
                     val text = if (onPartial != null) readStream(resp.body?.source(), onPartial) else readWhole(resp.body?.string() ?: "")
-                    if (text.isBlank()) throw GeminiError(-1, "رد فارغ من Gemini")
+                    if (text.isBlank()) throw GeminiError(EMPTY_REPLY, "رد فارغ من Gemini")
                     return@withContext text
                 }
             } catch (e: GeminiError) {
@@ -218,7 +217,7 @@ class GeminiClient(private val apiKey: String, var model: String = MODELS.first(
     /** رد generateContent غير المبثوث → نص المرشح الأول */
     private fun readWhole(text: String): String {
         val o = JSONObject(text)
-        val cand = o.optJSONArray("candidates")?.optJSONObject(0) ?: throw GeminiError(-1, "رد فارغ من Gemini" + (o.optJSONObject("promptFeedback")?.optString("blockReason")?.let { if (it.isNotBlank()) " ($it)" else "" } ?: ""))
+        val cand = o.optJSONArray("candidates")?.optJSONObject(0) ?: throw GeminiError(EMPTY_REPLY, "رد فارغ من Gemini" + (o.optJSONObject("promptFeedback")?.optString("blockReason")?.let { if (it.isNotBlank()) " ($it)" else "" } ?: ""))
         val partsOut = cand.optJSONObject("content")?.optJSONArray("parts") ?: JSONArray()
         val sb = StringBuilder()
         for (i in 0 until partsOut.length()) sb.append(partsOut.getJSONObject(i).optString("text"))
@@ -229,7 +228,7 @@ class GeminiClient(private val apiKey: String, var model: String = MODELS.first(
     suspend fun uploadFile(file: java.io.File, mime: String, displayName: String, onStatus: (String) -> Unit = {}, onProgress: (Float) -> Unit = {}): String = withContext(Dispatchers.IO) {
         onStatus("رفع الصوت إلى Gemini (${ArabicText.formatSize(file.length())})…")
         val meta = JSONObject().put("file", JSONObject().put("display_name", displayName)).toString()
-        val start = Request.Builder().url("$base/upload/v1beta/files?key=$apiKey")
+        val start = Request.Builder().url("$base/upload/v1beta/files").header("x-goog-api-key", apiKey)
             .header("X-Goog-Upload-Protocol", "resumable").header("X-Goog-Upload-Command", "start")
             .header("X-Goog-Upload-Header-Content-Length", file.length().toString()).header("X-Goog-Upload-Header-Content-Type", mime)
             .post(meta.toByteArray().toRequestBody("application/json".toMediaType())).build()
@@ -267,12 +266,12 @@ class GeminiClient(private val apiKey: String, var model: String = MODELS.first(
         while (state == "PROCESSING" && waited < 600) {
             onStatus("Gemini يعالج الملف الصوتي…")
             delay(5_000); waited += 5
-            val st = client.newCall(Request.Builder().url("$base/v1beta/$name?key=$apiKey").build()).execute().use { JSONObject(it.body?.string() ?: "{}") }
+            val st = client.newCall(Request.Builder().url("$base/v1beta/$name").header("x-goog-api-key", apiKey).build()).execute().use { JSONObject(it.body?.string() ?: "{}") }
             state = st.optString("state", state); uri = st.optString("uri", uri)
             err = st.optJSONObject("error")?.optString("message") ?: err
         }
         if (state != "ACTIVE") {
-            runCatching { client.newCall(Request.Builder().url("$base/v1beta/$name?key=$apiKey").delete().build()).execute().close() }
+            runCatching { client.newCall(Request.Builder().url("$base/v1beta/$name").header("x-goog-api-key", apiKey).delete().build()).execute().close() }
             throw FileProcessingError(state, mime, err)
         }
         uri
@@ -289,6 +288,9 @@ class GeminiClient(private val apiKey: String, var model: String = MODELS.first(
     }
 
     companion object {
+        /** رد فارغ أو محجوب: حتمي غالبًا فلا يُعاد داخل generate (تكفي محاولات المستدعي) حتى لا تُستنزف الحصة اليومية */
+        const val EMPTY_REPLY = -2
+
         /** النماذج بترتيب التجربة (سبتمبر ٢٠٢٦: 2.5 لم تعد متاحة للمفاتيح الجديدة؛ حصة الطبقة المجانية لكل نموذج ٢٠ طلبًا/يوم) */
         val MODELS = listOf("gemini-3.5-flash", "gemini-3.6-flash", "gemini-3-flash-preview", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-flash-latest", "gemini-2.5-flash")
 
@@ -324,7 +326,7 @@ class GeminiClient(private val apiKey: String, var model: String = MODELS.first(
                 for (i in 0 until partsOut.length()) { val t = partsOut.getJSONObject(i).optString("text"); if (t.isNotEmpty()) { sb.append(t); added = true } }
                 if (added) onPartial(sb.toString())
             }
-            if (sb.isBlank() && blocked != null) throw GeminiError(-1, "رد فارغ من Gemini ($blocked)")
+            if (sb.isBlank() && blocked != null) throw GeminiError(EMPTY_REPLY, "رد فارغ من Gemini ($blocked)")
             return sb.toString()
         }
 
@@ -341,7 +343,8 @@ class GeminiClient(private val apiKey: String, var model: String = MODELS.first(
 
         fun formatClock(ms: Long): String {
             val s = ms / 1000
-            return "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60)
+            // Locale.US: الناتج يدخل موجّه Gemini ويُحلَّل بـ startRegex ([0-9])؛ الأرقام المشرقية في أجهزة عربية/فارسية تكسر ذلك
+            return "%d:%02d:%02d".format(java.util.Locale.US, s / 3600, (s % 3600) / 60, s % 60)
         }
 
         /** تحويل رد JSON إلى مواضع؛ يقبل {"topics":[…]} أو مصفوفة مباشرة، ويتسامح مع أسوار الشيفرة */
@@ -436,7 +439,8 @@ $transcript"""
     suspend fun transcribeAudio(file: java.io.File, mime: String, title: String, durationMs: Long = 0, onStatus: (String) -> Unit = {}, onProgress: (Float) -> Unit = {}): List<ParsedSegment> {
         val mediaPart: JSONObject
         // نصيب مراحل التقدّم: الرفع ١٥٪ والمعالجة ٣٪ ثم التفريغ (نوافذه بالتساوي)
-        val uploadShare = if (file.length() <= 12L * 1024 * 1024 && durationMs <= WINDOW_MS + 5 * 60_000L) 0.03f else 0.18f
+        // التضمين حتى ٤ م.ب فقط: base64 ثم JSON ثم بايتات يضاعف الحجم في الذاكرة مرات (خطر نفاد الذاكرة)؛ الأكبر عبر Files API
+        val uploadShare = if (file.length() <= 4L * 1024 * 1024 && durationMs <= WINDOW_MS + 5 * 60_000L) 0.03f else 0.18f
         if (uploadShare < 0.1f) {
             onStatus("إرسال الصوت إلى Gemini (${ArabicText.formatSize(file.length())})…")
             mediaPart = JSONObject().put("inline_data", JSONObject().put("mime_type", mime).put("data", okio.ByteString.of(*file.readBytes()).base64()))
@@ -478,11 +482,11 @@ $transcript"""
             if (topics.isEmpty()) throw (lastErr ?: GeminiError(-1, "لم يُعطِ Gemini تفريغًا"))
             if (w != null) {
                 // ما خرج عن النافذة يُهمل (إلا أن أول موضع يبدأ من بداية النافذة)
-                val lastEnd = out.lastOrNull()?.start ?: -1L
+                var lastEnd = out.lastOrNull()?.start ?: -1L
                 for (t in topics) {
                     val st = if (t.start < w.first) w.first else t.start
                     if (st >= w.second + 30_000L || st <= lastEnd) continue
-                    out.add(ParsedSegment(st, t.line, t.write, t.ques, t.hnum))
+                    out.add(ParsedSegment(st, t.line, t.write, t.ques, t.hnum)); lastEnd = st
                 }
             } else out.addAll(topics)
             onProgress(base + perWindow)
@@ -533,8 +537,8 @@ object AutoIndexer {
                 val media = mediaLoader(chapter, onStatus) { f -> onProgress(0.01f + 0.29f * f.coerceIn(0f, 1f)) }
                 if (media != null) {
                     onProgress(0.3f)
-                    val segs = gemini.transcribeAudio(media.file, media.mime, chapter.title, media.durationMs, onStatus) { f -> onProgress(0.3f + 0.69f * f.coerceIn(0f, 1f)) }
-                    runCatching { media.file.delete() }
+                    // الملف المؤقت يُحذف حتى عند الفشل أو الإيقاف أو نفاد الحصة
+                    val segs = try { gemini.transcribeAudio(media.file, media.mime, chapter.title, media.durationMs, onStatus) { f -> onProgress(0.3f + 0.69f * f.coerceIn(0f, 1f)) } } finally { runCatching { media.file.delete() } }
                     onProgress(0.99f)
                     return AutoIndexResult(segs, "تفريغ الصوت بالذكاء الاصطناعي (Gemini) واستنباط المواضيع", 0)
                 }
@@ -645,17 +649,18 @@ class AutoIndexJob(
                 quotaMessage = if (quota) "توقف التفريغ سابقًا لنفاد حصة Gemini اليومية — تابع بعد تجدد الحصة" else "", finishedAt = if (paused) System.currentTimeMillis() else 0)
             // ما أوقفه المستخدم بنفسه أو توقف لنفاد الحصة لا يُستأنف تلقائيًا، بل يُعرض في الشريط للمتابعة اليدوية
             if (!paused) launchWorker()
-        }
+        }.onFailure { f.delete() } // ملف تالف: يُحذف بدل إعادة المحاولة عند كل فتح
     }
 
-    private fun saveQueue(quota: Boolean = false, paused: Boolean = false) {
+    /** كتابة ذرّية (ملف مؤقت ثم إعادة تسمية) ومتزامنة: تُستدعى من خيط الواجهة ومن العامل */
+    @Synchronized private fun saveQueue(quota: Boolean = false, paused: Boolean = false) {
         val f = queueFile ?: return
         val st = _state.value
         val pending = st.items.filter { !it.done }
         if (pending.isEmpty()) { f.delete(); return }
         val arr = JSONArray()
         for (it in pending) arr.put(JSONObject().put("code", it.code).put("title", it.title).put("replace", it.replace).put("sheekhId", it.sheekhId).put("bookId", it.bookId))
-        runCatching { f.writeText(JSONObject().put("items", arr).put("sheekhId", st.sheekhId).put("bookId", st.bookId).put("bookName", st.bookName).put("quota", quota).put("paused", paused || quota).toString()) }
+        runCatching { val tmp = java.io.File(f.path + ".tmp"); tmp.writeText(JSONObject().put("items", arr).put("sheekhId", st.sheekhId).put("bookId", st.bookId).put("bookName", st.bookName).put("quota", quota).put("paused", paused || quota).toString()); tmp.renameTo(f) }
     }
 
     private fun launchWorker() {
@@ -670,7 +675,8 @@ class AutoIndexJob(
                     val idx = _state.value.items.indexOfFirst { !it.done }
                     if (idx < 0) break
                     val item = _state.value.items[idx]
-                    fun upd(f: (Item) -> Item) { _state.update { st -> st.copy(items = st.items.mapIndexed { j, x -> if (j == idx) f(x) else x }) } }
+                    // بالرمز لا بالموضع: start() قد يعيد ترتيب القائمة أثناء عمل العامل
+                    fun upd(f: (Item) -> Item) { _state.update { st -> st.copy(items = st.items.map { x -> if (x.code == item.code && !x.done) f(x) else x }) } }
                     _state.update { it.copy(current = idx, status = "") }
                     val ch = content.chapter(-item.code)
                     if (ch == null) { upd { it.copy(state = "الدرس لم يعد موجودًا", error = "غير موجود", done = true, pending = false) }; saveQueue(); continue }

@@ -150,7 +150,7 @@ fun TapeTranscriptScreen(app: App, repo: Repository, nav: NavHostController, cod
         scope.launch {
             runCatching {
                 val dir = File(context.cacheDir, "exports").apply { mkdirs() }
-                val safeName = "${c.sheekhName} - ${c.bookName} - ${c.displayTitle} (${c.fileName})".replace(Regex("[\\\\/:*?\"<>|]"), "-")
+                val safeName = "${c.sheekhName} - ${c.bookName} - ${c.displayTitle} (${c.fileName})".replace(Regex("[\\\\/:*?\"<>|]"), "-").take(80) // حد اسم الملف ٢٥٥ بايت والحرف العربي بايتان
                 val f = File(dir, "$safeName.txt")
                 f.writeText(fullText())
                 val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", f)

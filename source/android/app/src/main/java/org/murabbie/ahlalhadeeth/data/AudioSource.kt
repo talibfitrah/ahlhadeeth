@@ -72,10 +72,6 @@ class AudioSource(private val context: Context, private val settings: Settings) 
         return if (f.isFile) f.uri else null
     }
 
-    fun clearTreeCache() {
-        synchronized(this) { dirCache.clear() }
-    }
-
     data class Resolved(val uri: Uri, val isLocal: Boolean)
 
     fun resolve(chapter: Chapter): Resolved {

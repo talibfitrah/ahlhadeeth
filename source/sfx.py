@@ -1,7 +1,7 @@
-import os, struct, zlib, sys
+import os, struct, zlib
 from io import BytesIO
 import pefile
-from sfextract.setupfactory7 import SetupFactory7Extractor, SIGNATURE, ReadSpecialFile, FILENAME_EMBEDDED_INSTALLER, FILENAME_SIZE
+from sfextract.setupfactory7 import SetupFactory7Extractor, ReadSpecialFile, FILENAME_EMBEDDED_INSTALLER, FILENAME_SIZE
 from sfextract import SCRIPT_FILE_NAME, decompress, SFFileEntry
 
 DEP_SIZE = 1028368

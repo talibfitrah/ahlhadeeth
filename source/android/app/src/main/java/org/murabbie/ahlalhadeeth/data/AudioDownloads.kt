@@ -21,16 +21,14 @@ class AudioDownloads(private val context: Context, private val settings: Setting
     private val _progress = MutableStateFlow<Map<Int, Pair<Long, Long>>>(emptyMap())
     val progress: StateFlow<Map<Int, Pair<Long, Long>>> = _progress
 
-    private val _activeCode = MutableStateFlow(0)
-    val activeCode: StateFlow<Int> = _activeCode
-
     fun enqueue(chapters: List<Chapter>) {
         scope.launch {
             for (ch in chapters) {
                 if (ch.isUser && audioSource.remoteUrl(ch).isBlank()) continue // ملف محلي أصلًا
                 val dest = audioSource.localFile(ch)
-                if (dest.exists() && dest.length() > 0) {
-                    val existing = userDb.download(ch.code)
+                val existing = userDb.download(ch.code)
+                // صف غير مكتمل مع ملف في المسار النهائي = تنزيل مبتور من نسخة أقدم: يُستأنف ولا يُعدّ مكتملًا
+                if (dest.exists() && dest.length() > 0 && (existing == null || existing.state == DownloadEntry.DONE)) {
                     if (existing == null) userDb.addDownload(ch.code, "${ch.sheekhName} — ${ch.bookName} — ${ch.displayTitle} (${ch.fileName})", audioSource.remoteUrl(ch), dest.absolutePath)
                     userDb.updateDownload(ch.code, dest.length(), dest.length(), DownloadEntry.DONE)
                     continue
@@ -43,7 +41,8 @@ class AudioDownloads(private val context: Context, private val settings: Setting
 
     fun startService() {
         val intent = Intent(context, DownloadService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
+        // أندرويد ١٢+: يُمنع بدء الخدمة الأمامية إن غادر التطبيق الواجهة؛ تبقى العناصر قيد الانتظار بدل انهيار التطبيق
+        runCatching { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent) }
     }
 
     fun pause(code: Int) {
@@ -80,6 +79,7 @@ class AudioDownloads(private val context: Context, private val settings: Setting
         scope.launch {
             val d = userDb.download(code)
             DownloadService.cancelCurrent(code)
+            if (d != null) File(d.dest + ".part").delete()
             if (deleteFile && d != null) File(d.dest).delete()
             userDb.removeDownload(code)
         }
@@ -93,11 +93,9 @@ class AudioDownloads(private val context: Context, private val settings: Setting
 
     internal fun reportProgress(code: Int, bytes: Long, total: Long) {
         _progress.value = mapOf(code to (bytes to total))
-        _activeCode.value = code
     }
 
     internal fun reportIdle() {
         _progress.value = emptyMap()
-        _activeCode.value = 0
     }
 }

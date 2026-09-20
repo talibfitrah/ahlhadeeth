@@ -119,14 +119,15 @@ class TransferJob(
 
     // ---------- الحفظ والاستئناف ----------
 
-    private fun saveQueue() {
+    /** كتابة ذرّية (ملف مؤقت ثم إعادة تسمية) ومتزامنة: يستدعيها المنزِّل والرافع معًا. paused = أوقفه المستخدم فلا يُستأنف تلقائيًا */
+    @Synchronized private fun saveQueue(paused: Boolean = false) {
         val st = _state.value
         runCatching {
-            val o = JSONObject().put("sheekhId", st.sheekhId).put("bookId", st.bookId).put("bookName", st.bookName).put("subDir", st.subDir).put("quality", st.quality).put("startedAt", st.startedAt)
+            val o = JSONObject().put("sheekhId", st.sheekhId).put("bookId", st.bookId).put("bookName", st.bookName).put("subDir", st.subDir).put("quality", st.quality).put("startedAt", st.startedAt).put("paused", paused)
             val arr = JSONArray()
             for (it in st.items) arr.put(JSONObject().put("code", it.code).put("title", it.title).put("done", it.done).put("error", it.error ?: JSONObject.NULL))
             o.put("items", arr)
-            queueFile.writeText(o.toString())
+            val tmp = File(queueFile.path + ".tmp"); tmp.writeText(o.toString()); tmp.renameTo(queueFile)
         }
     }
 
@@ -151,7 +152,13 @@ class TransferJob(
                     pending.add(ch)
                 }
                 if (pending.isEmpty() || !sync.isAdmin) { clearQueue(); return@launch }
-                start(pending, o.optString("subDir"), if (o.has("quality")) o.optInt("quality") else (if (o.optBoolean("video")) YouTubeMedia.QUALITY_VIDEO_SD else YouTubeMedia.QUALITY_AUDIO), o.optInt("sheekhId"), o.optInt("bookId"), o.optString("bookName"), previousDone = doneItems, resumed = true, startedAt = o.optLong("startedAt"))
+                val quality = if (o.has("quality")) o.optInt("quality") else (if (o.optBoolean("video")) YouTubeMedia.QUALITY_VIDEO_SD else YouTubeMedia.QUALITY_AUDIO)
+                if (o.optBoolean("paused")) {
+                    // ما أوقفه المستخدم بنفسه لا يُستأنف تلقائيًا: تُعرض القائمة للمتابعة اليدوية (retryPending) كما في AutoIndexJob
+                    if (!_state.value.running && _state.value.items.isEmpty()) _state.value = State(items = doneItems + pending.map { Item(it.code, it.displayTitle, "أُوقف — يُستأنف لاحقًا") }, quality = quality, sheekhId = o.optInt("sheekhId"), bookId = o.optInt("bookId"), bookName = o.optString("bookName"), subDir = o.optString("subDir"), startedAt = o.optLong("startedAt"), finishedAt = System.currentTimeMillis())
+                    return@launch
+                }
+                start(pending, o.optString("subDir"), quality, o.optInt("sheekhId"), o.optInt("bookId"), o.optString("bookName"), previousDone = doneItems, resumed = true, startedAt = o.optLong("startedAt"))
             } catch (e: Exception) {
                 clearQueue()
             }
@@ -174,7 +181,7 @@ class TransferJob(
         onRunningChanged(true)
         job = scope.launch {
             try {
-                runPipeline(todo, subDir, quality)
+                runPipeline(todo, subDir, quality, previousDone.size)
                 // نشر تلقائي للجميع بعد النقل (إن كان المشرف مسجَّل الدخول) حتى يُشغَّل من الخادم عند كل المستخدمين بلا خطوة يدوية
                 if (isActive && _state.value.items.any { it.done } && sync.isAdmin) {
                     _state.update { it.copy(current = "", phase = "نشر التغييرات للجميع…") }
@@ -187,7 +194,7 @@ class TransferJob(
                 }
                 clearQueue()
             } catch (e: kotlinx.coroutines.CancellationException) {
-                saveQueue() // يبقى في القائمة للاستئناف
+                saveQueue(paused = true) // يبقى في القائمة للاستئناف؛ الإلغاء لا يأتي إلا من المستخدم (cancel) فلا يُستأنف تلقائيًا عند فتح التطبيق
             } finally {
                 _state.update { it.copy(running = false, current = "", phase = "", finishedAt = System.currentTimeMillis()) }
                 onRunningChanged(false)
@@ -222,7 +229,7 @@ class TransferJob(
     private class Downloaded(val ch: Chapter, val ordinal: Int, val file: File, val mime: String, val isVideo: Boolean, val sourceUrl: String)
 
     /** خط أنابيب: منزِّل ← قناة ← رافع */
-    private suspend fun runPipeline(todo: List<Chapter>, subDir: String, quality: Int) = coroutineScope {
+    private suspend fun runPipeline(todo: List<Chapter>, subDir: String, quality: Int, doneBefore: Int) = coroutineScope {
         val channel = Channel<Downloaded>(capacity = 1)
         val downloader = launch {
             try {
@@ -233,7 +240,7 @@ class TransferJob(
                     for (attempt in 1..3) {
                         try {
                             upd(ch.code) { it.copy(phase = 1, state = "تنزيل…", error = null) }; refreshSummary()
-                            out = downloadOne(ch, i + 1, quality)
+                            out = downloadOne(ch, doneBefore + i + 1, quality) // الترقيم يشمل ما أُنجز قبل الاستئناف حتى يبقى اسم الملف ثابتًا
                             lastErr = null; break
                         } catch (e: kotlinx.coroutines.CancellationException) {
                             upd(ch.code) { it.copy(state = "أُوقف — يُستأنف لاحقًا", phase = 0) }; throw e
@@ -310,7 +317,10 @@ class TransferJob(
                         // صوت opus لا يُدمج في mp4: يُكتفى بالفيديو المدمج العادي إن وُجد
                         vLocal.delete(); aLocal.delete()
                         val sd = ex.video ?: throw IllegalStateException("لا مسار صوت m4a لدمجه مع الفيديو العالي")
-                        parallelDownload(sd.url, { YouTubeMedia.extract(vid).video?.url ?: sd.url }, out, ch.code, "Mozilla/5.0")
+                        // إلى ‎.part ثم إعادة تسمية: ParallelDownload يحجز الحجم كاملًا مسبقًا، فملف out غير المكتمل بعد قتل التطبيق كان يُعدّ «مكتملًا» ويُرفع
+                        val part = File(tmp, out.name + ".part")
+                        parallelDownload(sd.url, { YouTubeMedia.extract(vid).video?.url ?: sd.url }, part, ch.code, "Mozilla/5.0")
+                        if (!part.renameTo(out)) throw java.io.IOException("تعذرت إعادة تسمية الملف المنزَّل")
                     }
                 }
                 if (out.length() < 10_000) throw IllegalStateException("الملف المنزَّل صغير جدًا")

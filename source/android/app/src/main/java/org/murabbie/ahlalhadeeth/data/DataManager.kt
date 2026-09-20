@@ -12,7 +12,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -21,11 +20,6 @@ import java.io.SequenceInputStream
 import java.util.Collections
 import java.util.zip.GZIPInputStream
 import org.murabbie.ahlalhadeeth.BuildConfig
-
-/** مفاتيح البناء الخاصة بالتنزيل التلقائي */
-object BuildConfigAuto {
-    const val AUTO_DOWNLOAD: Boolean = BuildConfig.AUTO_DOWNLOAD
-}
 
 /** وصف حزمة البيانات كما في manifest.json على NAS */
 data class DataPack(
@@ -40,6 +34,7 @@ data class DataPack(
     val partSizes: List<Long>,
     val description: String,
     val altParts: List<String> = emptyList(),
+    val partSha: List<String> = emptyList(),
 )
 
 data class AppRelease(
@@ -73,6 +68,8 @@ class DataManager(private val context: Context, private val settings: Settings) 
     val manifest: StateFlow<Manifest?> = _manifest
     private var job: Job? = null
     private var currentRepo: Repository? = null
+    /** حالة القاعدة المثبَّتة ما دامت مفتوحة: يُعاد إليها إن فشلت «إعادة تنزيل البيانات» أو أُلغيت بدل حبس المستخدم في شاشة التجهيز */
+    private var readyState: DataState.Ready? = null
 
     /** عدّاد الثواني حتى إعادة المحاولة التلقائية (٠ = لا انتظار) */
     private val _retryCountdown = MutableStateFlow(0)
@@ -88,8 +85,8 @@ class DataManager(private val context: Context, private val settings: Settings) 
     val dbFile: File get() = File(dataDir, "ahl_alhadeeth.db")
     private val partsDir: File get() = File(context.filesDir, "parts").apply { mkdirs() }
     private val versionFile: File get() = File(dataDir, "version.txt")
+    private val tmpFile: File get() = File(dataDir, "ahl_alhadeeth.db.tmp")
 
-    val repository: Repository? get() = (_state.value as? DataState.Ready)?.repo
     val installedVersion: String get() = if (versionFile.exists()) versionFile.readText().trim() else ""
 
     init {
@@ -106,7 +103,7 @@ class DataManager(private val context: Context, private val settings: Settings) 
                 val info = repo.info()
                 if (info.meta["schema_version"].isNullOrEmpty()) throw IllegalStateException("قاعدة بيانات غير صالحة")
                 currentRepo = repo
-                _state.value = DataState.Ready(repo, info)
+                _state.value = DataState.Ready(repo, info).also { readyState = it }
                 return
             } catch (e: Exception) {
                 // قاعدة تالفة أو ناقصة: تُحذف لتُنزَّل من جديد
@@ -120,7 +117,7 @@ class DataManager(private val context: Context, private val settings: Settings) 
 
     /** يُستدعى من الواجهة عند الإقلاع: يبدأ التنزيل التلقائي إن لم تكن البيانات مثبَّتة */
     fun autoStartIfNeeded() {
-        if (!BuildConfigAuto.AUTO_DOWNLOAD) return
+        if (!BuildConfig.AUTO_DOWNLOAD) return
         if (userPaused.value) return
         val st = _state.value
         if (st is DataState.NotInstalled || (st is DataState.Error && st.retryable)) {
@@ -173,6 +170,7 @@ class DataManager(private val context: Context, private val settings: Settings) 
             val parts = ArrayList<String>()
             val alts = ArrayList<String>()
             val sizes = ArrayList<Long>()
+            val shas = ArrayList<String>()
             val arr = it.optJSONArray("parts")
             if (arr != null) for (i in 0 until arr.length()) {
                 val p = arr.get(i)
@@ -180,10 +178,12 @@ class DataManager(private val context: Context, private val settings: Settings) 
                     parts.add(p.optString("url"))
                     alts.add(p.optString("alt_url", ""))
                     sizes.add(p.optLong("size", -1))
+                    shas.add(p.optString("sha256", ""))
                 } else {
                     parts.add(p.toString())
                     alts.add("")
                     sizes.add(-1)
+                    shas.add("")
                 }
             }
             DataPack(
@@ -198,6 +198,7 @@ class DataManager(private val context: Context, private val settings: Settings) 
                 partSizes = sizes,
                 description = it.optString("description", ""),
                 altParts = alts,
+                partSha = shas,
             )
         }
         val a = o.optJSONObject("app")
@@ -256,6 +257,8 @@ class DataManager(private val context: Context, private val settings: Settings) 
 
     /** بدء التنزيل والتثبيت من NAS */
     private var downloadGen = 0
+    /** إخفاقات متتالية في التحقق من السلامة: بعد اثنين تتوقف إعادة المحاولة التلقائية (وإلا أُعيد تنزيل ١٧٧ م.ب بلا نهاية على باقة المستخدم) */
+    private var integrityFailures = 0
 
     fun startDownload(manifestUrl: String = settings.value.manifestUrl) {
         job?.cancel()
@@ -264,21 +267,25 @@ class DataManager(private val context: Context, private val settings: Settings) 
         _state.value = DataState.Downloading(0, 0, 0, 0, "الاتصال بخادم البيانات…")
         job = scope.launch {
             try {
+                redownloadError.value = null
                 val m = fetchManifest(manifestUrl)
                 val pack = m.data ?: throw IllegalStateException("ملف الوصف لا يحوي بيانات")
                 if (pack.parts.isEmpty()) throw IllegalStateException("لا توجد أجزاء للتنزيل")
+                // بقايا فك ضغط سابق (حتى ٥٧٠ م.ب) تُحذف قبل فحص المساحة؛ الاسم من manifest يُجرَّد من أي مسار، والأرقام لاتينية أيًّا كانت لغة الجهاز
+                tmpFile.delete()
+                val partFiles = pack.parts.indices.map { File(partsDir, File(pack.file).name + ".%03d".format(java.util.Locale.ROOT, it + 1)) }
+                partsDir.listFiles()?.forEach { if (it !in partFiles) it.delete() } // أجزاء يتيمة (أسماء قديمة أو ملف آخر) لا تُحسب ولا تبقى
                 val need = (if (pack.sizeGz > 0) pack.sizeGz else 200L * 1024 * 1024) + (if (pack.sizeDb > 0) pack.sizeDb else 700L * 1024 * 1024)
                 val free = freeBytes(context.filesDir)
-                if (free in 0 until need) {
+                // ما نُزِّل من الأجزاء موجود على القرص أصلًا فلا يُحسب ضمن اللازم
+                if (free in 0 until need - partFiles.sumOf { it.length() }) {
                     throw NoSpaceException("المساحة المتاحة (${ArabicText.formatSize(free)}) لا تكفي؛ يلزم نحو ${ArabicText.formatSize(need)}. حرِّر مساحة ثم اضغط «إعادة المحاولة».")
                 }
-                val partFiles = ArrayList<File>()
                 var downloadedBefore = 0L
                 val totalGz = if (pack.sizeGz > 0) pack.sizeGz else -1L
                 for ((i, url) in pack.parts.withIndex()) {
                     currentCoroutineContext().ensureActive()
-                    val pf = File(partsDir, pack.file + ".%03d".format(i + 1))
-                    partFiles.add(pf)
+                    val pf = partFiles[i]
                     val expected = pack.partSizes.getOrElse(i) { -1L }
                     val base = downloadedBefore
                     val onProgress: suspend (Long, Long) -> Unit = { have, _ ->
@@ -294,21 +301,43 @@ class DataManager(private val context: Context, private val settings: Settings) 
                         _state.value = DataState.Downloading(i + 1, pack.parts.size, base + pf.length(), totalGz, "تعذر الرابط الأول؛ المحاولة عبر الرابط البديل…")
                         NasHttp.download(alt, pf, expected, attempts = 6, onProgress = onProgress)
                     }
+                    // بصمة كل جزء (إن وُجدت في manifest): جزء تالف أو من إصدار آخر يُحذف وحده بدل إعادة تنزيل الكل
+                    val sha = pack.partSha.getOrElse(i) { "" }
+                    var shaOk = sha.isBlank() || NasHttp.sha256(pf).equals(sha, true)
+                    if (!shaOk) {
+                        pf.delete() // غالبًا جزء من إصدار بيانات أقدم: يُعاد تنزيله مرة في مكانه قبل عدّه فشلًا
+                        NasHttp.download(url, pf, expected, attempts = 8, onProgress = onProgress)
+                        shaOk = NasHttp.sha256(pf).equals(sha, true)
+                    }
+                    if (!shaOk) {
+                        pf.delete()
+                        throw IntegrityException("فشل التحقق من سلامة الجزء ${ArabicText.arabicDigits(i + 1)}؛ سيُعاد تنزيله")
+                    }
                     downloadedBefore += pf.length()
                 }
-                install(partFiles, pack)
-                partFiles.forEach { it.delete() }
+                try { install(partFiles, pack) } catch (e: Throwable) { tmpFile.delete(); throw e } // لا يبقى ملف ٥٧٠ م.ب بعد أي فشل
+                clearPartialDownloads() // يشمل أجزاء بأسماء قديمة (أرقام عربية) تركتها نسخ سابقة
+                integrityFailures = 0
             } catch (e: kotlinx.coroutines.CancellationException) {
-                if (gen == downloadGen) _state.value = DataState.NotInstalled
+                if (gen == downloadGen) _state.value = readyState ?: DataState.NotInstalled
+            } catch (e: IntegrityException) {
+                redownloadError.value = e.message
+                if (gen == downloadGen) _state.value = readyState ?: DataState.Error(e.message ?: "فشل التحقق من سلامة الملف", retryable = ++integrityFailures < 2)
             } catch (e: NoSpaceException) {
-                if (gen == downloadGen) _state.value = DataState.Error(e.message ?: "المساحة لا تكفي", retryable = false)
+                redownloadError.value = e.message
+                if (gen == downloadGen) _state.value = readyState ?: DataState.Error(e.message ?: "المساحة لا تكفي", retryable = false)
             } catch (e: Exception) {
-                if (gen == downloadGen) _state.value = DataState.Error(friendlyError(e))
+                redownloadError.value = friendlyError(e)
+                if (gen == downloadGen) _state.value = readyState ?: DataState.Error(friendlyError(e))
             }
         }
     }
 
+    /** سبب فشل آخر «إعادة تنزيل» جرت والقاعدة المثبَّتة سليمة (يُعرض في الإعدادات بدل الرجوع الصامت) */
+    val redownloadError = MutableStateFlow<String?>(null)
+
     class NoSpaceException(msg: String) : Exception(msg)
+    class IntegrityException(msg: String) : Exception(msg)
 
     private fun friendlyError(e: Exception): String {
         val m = e.message ?: ""
@@ -329,6 +358,7 @@ class DataManager(private val context: Context, private val settings: Settings) 
     private fun closeCurrent() {
         currentRepo?.close()
         currentRepo = null
+        readyState = null
     }
 
     /** فك الضغط والتحقق ثم فتح القاعدة */
@@ -337,9 +367,11 @@ class DataManager(private val context: Context, private val settings: Settings) 
         val totalGz = partFiles.sumOf { it.length() }
         if (pack != null && pack.sizeGz > 0 && totalGz != pack.sizeGz) {
             partFiles.forEach { it.delete() }
-            throw IllegalStateException("حجم الأجزاء ($totalGz) لا يطابق الحجم المتوقع (${pack.sizeGz})؛ سيُعاد التنزيل")
+            throw IntegrityException("حجم الأجزاء ($totalGz) لا يطابق الحجم المتوقع (${pack.sizeGz})؛ سيُعاد التنزيل")
         }
-        if (pack != null && pack.sha256Gz.isNotEmpty()) {
+        if (pack != null) {
+            // تنزيل من الشبكة (وقد يكون عبر alt_url بلا تشفير): لا تثبيت بلا بصمة؛ الاستيراد المحلي (pack == null) لا يمر من هنا
+            if (pack.sha256Gz.isBlank()) throw IllegalStateException("ملف الوصف لا يحوي بصمة sha256 للبيانات")
             val md = java.security.MessageDigest.getInstance("SHA-256")
             var done = 0L
             for (pf in partFiles) {
@@ -358,10 +390,10 @@ class DataManager(private val context: Context, private val settings: Settings) 
             val hex = md.digest().joinToString("") { "%02x".format(it) }
             if (!hex.equals(pack.sha256Gz, true)) {
                 partFiles.forEach { it.delete() }
-                throw IllegalStateException("فشل التحقق من سلامة الملف (sha256 لا يطابق)؛ سيُعاد التنزيل")
+                throw IntegrityException("فشل التحقق من سلامة الملف (sha256 لا يطابق)؛ سيُعاد التنزيل")
             }
         }
-        val tmp = File(dataDir, "ahl_alhadeeth.db.tmp")
+        val tmp = tmpFile
         tmp.delete()
         _state.value = DataState.Installing("فك الضغط…", 0f)
         val streams = Collections.enumeration(partFiles.map { it.inputStream() as InputStream })
@@ -376,6 +408,8 @@ class DataManager(private val context: Context, private val settings: Settings) 
                     if (n < 0) break
                     out.write(buf, 0, n)
                     done += n
+                    // سقف لفك الضغط: لا يُكتب أكثر من الحجم المعلن
+                    if (expectedDb > 0 && done > expectedDb) throw IllegalStateException("حجم القاعدة بعد فك الضغط يتجاوز المتوقع")
                     if (expectedDb > 0) _state.value = DataState.Installing("فك الضغط… ${ArabicText.formatSize(done)}", (done.toFloat() / expectedDb).coerceAtMost(1f))
                 }
             }
@@ -416,7 +450,7 @@ class DataManager(private val context: Context, private val settings: Settings) 
                 if (isGz) {
                     install(listOf(local), null)
                 } else {
-                    val tmp = File(dataDir, "ahl_alhadeeth.db.tmp")
+                    val tmp = tmpFile
                     tmp.delete()
                     if (!local.renameTo(tmp)) local.copyTo(tmp, true)
                     val test = Db(tmp.absolutePath, readOnly = true)
@@ -448,18 +482,15 @@ class DataManager(private val context: Context, private val settings: Settings) 
             closeCurrent()
             dbFile.delete()
             versionFile.delete()
-            partsDir.listFiles()?.forEach { it.delete() }
+            clearPartialDownloads()
             _state.value = DataState.NotInstalled
         }
     }
 
     fun clearPartialDownloads() {
         partsDir.listFiles()?.forEach { it.delete() }
+        tmpFile.delete()
     }
 
     fun partialBytes(): Long = partsDir.listFiles()?.sumOf { it.length() } ?: 0L
-
-    fun retryOpen() {
-        scope.launch { openIfPresent() }
-    }
 }

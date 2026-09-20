@@ -29,6 +29,7 @@ class DownloadService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var worker: Job? = null
+    private var lastStartId = 0
     @Volatile private var currentCode = 0
     @Volatile private var currentJob: Job? = null
 
@@ -37,10 +38,13 @@ class DownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        startForegroundCompat(buildNotification("بدء التنزيل…", 0, 0))
+        runCatching { startForegroundCompat(buildNotification("بدء التنزيل…", 0, 0)) } // الفشل يُعالَج في onStartCommand
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
+        // كل startForegroundService يُلزم باستدعاء startForeground ولو كانت الخدمة قائمة (وإلا أُغلق التطبيق بخطأ)
+        runCatching { startForegroundCompat(buildNotification("بدء التنزيل…", 0, 0)) }.onFailure { stopSelf(); return START_NOT_STICKY } // نفاد مهلة dataSync اليومية: الصفوف تبقى معلَّقة
         if (worker == null || worker?.isActive != true) {
             worker = scope.launch { loop() }
         }
@@ -65,7 +69,10 @@ class DownloadService : Service() {
         val app = App.instance
         val userDb = app.userDb
         val dl = app.audioDownloads
+        var finished = false
         try {
+            // صفوف بقيت «جارٍ التنزيل» بعد موت العملية: تعود إلى الانتظار (لا تنزيل جارٍ عند بدء الحلقة)
+            userDb.setAllDownloadsState(DownloadEntry.RUNNING, DownloadEntry.PENDING)
             while (true) {
                 val next = userDb.nextPendingDownload() ?: break
                 if (app.settings.value.wifiOnlyDownloads && !isWifi()) {
@@ -75,10 +82,13 @@ class DownloadService : Service() {
                 currentCode = next.code
                 userDb.setDownloadState(next.code, DownloadEntry.RUNNING)
                 val dest = File(next.dest)
+                // يُنزَّل إلى ‎.part ثم يُسمّى باسمه النهائي عند الاكتمال، حتى لا يُعدّ ملف مبتور شريطًا منزَّلًا (الاستئناف يجري على ‎.part)
+                val part = File(next.dest + ".part")
+                if (dest.exists() && !part.exists()) dest.renameTo(part) // ملف مبتور تركته نسخة أقدم في المسار النهائي: يُستأنف
                 val job = scope.launch {
                     try {
                         var lastDbUpdate = 0L
-                        NasHttp.download(next.url, dest, -1, attempts = 6) { bytes, total ->
+                        NasHttp.download(next.url, part, -1, attempts = 6) { bytes, total ->
                             dl.reportProgress(next.code, bytes, total)
                             val now = System.currentTimeMillis()
                             if (now - lastDbUpdate > 1500) {
@@ -87,12 +97,16 @@ class DownloadService : Service() {
                                 updateNotification(next.title, bytes, total)
                             }
                         }
+                        if (!part.renameTo(dest)) throw java.io.IOException("تعذر حفظ الملف")
                         userDb.updateDownload(next.code, dest.length(), dest.length(), DownloadEntry.DONE)
                     } catch (e: kotlinx.coroutines.CancellationException) {
-                        val d = userDb.download(next.code)
-                        if (d != null && d.state == DownloadEntry.RUNNING) userDb.updateDownload(next.code, dest.length(), d.total, DownloadEntry.PAUSED)
+                        // الكوروتين مُلغى: استدعاءات القاعدة المعلّقة ترمي فورًا ما لم تُحَط بـ NonCancellable
+                        withContext(kotlinx.coroutines.NonCancellable) {
+                            val d = userDb.download(next.code)
+                            if (d != null && d.state == DownloadEntry.RUNNING) userDb.updateDownload(next.code, part.length(), d.total, DownloadEntry.PAUSED)
+                        }
                     } catch (e: Exception) {
-                        userDb.updateDownload(next.code, dest.length(), -1, DownloadEntry.ERROR, e.message ?: "خطأ")
+                        userDb.updateDownload(next.code, part.length(), -1, DownloadEntry.ERROR, e.message ?: "خطأ")
                     }
                 }
                 currentJob = job
@@ -101,11 +115,14 @@ class DownloadService : Service() {
                 currentCode = 0
                 dl.reportIdle()
             }
+            finished = true
         } finally {
             dl.reportIdle()
             withContext(Dispatchers.Main) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                // طلب وصل أثناء الإنهاء (صف جديد، أو startId أحدث لم يُسلَّم بعد): نكمل بدل إيقاف الخدمة وترك العنصر معلّقًا
+                // لا إعادة تشغيل بعد خروج باستثناء (خطأ قاعدة دائم مثلًا) حتى لا تدور الحلقة بلا توقف
+                if (finished && (userDb.nextPendingDownload() != null || !stopSelfResult(lastStartId))) worker = scope.launch { loop() }
+                else { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
             }
         }
     }

@@ -84,6 +84,13 @@ fun AppTheme(themeMode: Int, fontScale: Float, content: @Composable () -> Unit) 
         else -> isSystemInDarkTheme()
     }
     val colors = if (dark) DarkColors else LightColors
+    // أندرويد ١٥+ يفرض «من حافة إلى حافة» ويتجاهل statusBarColor: بلا هذا تظهر أيقونات بيضاء على الشريط الفاتح
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (android.os.Build.VERSION.SDK_INT >= 35) androidx.compose.runtime.SideEffect {
+        (view.context as? android.app.Activity)?.window?.let { w ->
+            androidx.core.view.WindowCompat.getInsetsController(w, view).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
+        }
+    }
     val density = LocalDensity.current
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Rtl,

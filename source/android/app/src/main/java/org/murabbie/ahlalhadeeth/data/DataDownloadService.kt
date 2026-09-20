@@ -77,11 +77,11 @@ class DataDownloadService : Service() {
                     // انتظار حالة نهائية
                     val terminal = dm.state.first { it is DataState.Ready || it is DataState.Error || it is DataState.NotInstalled }
                     if (terminal is DataState.Error) {
-                        if (dm.userPaused.value) break
+                        if (dm.userPaused.value || !terminal.retryable) break // خطأ لا تُجدي معه إعادة المحاولة: لا عدّ تنازليًّا
                         dm.failures.value += 1
                         val wait = minOf(120, 10 shl minOf(dm.failures.value - 1, 4))  // ١٠، ٢٠، ٤٠، ٨٠، ١٢٠ ثانية
                         for (sec in wait downTo 1) {
-                            if (dm.userPaused.value) break
+                            if (dm.userPaused.value || dm.state.value !is DataState.Error) break // «إعادة المحاولة الآن» غيّرت الحالة: لا ننتظر بقية العدّ
                             dm.setRetryCountdown(sec)
                             delay(1000)
                         }
@@ -172,14 +172,13 @@ class DataDownloadService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        // قد يُعاد نشر إشعار التقدّم بعد stopForeground فيبقى إشعار دائم بلا خدمة
+        runCatching { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID) }
         super.onDestroy()
     }
 
     /** أندرويد ١٥: حد ست ساعات لخدمات dataSync — عند بلوغه تُوقَف الخدمة الأمامية فورًا (وإلا أُغلق التطبيق بخطأ)؛ العمل يُستأنف عند فتح التطبيق */
-    override fun onTimeout(startId: Int, fgsType: Int) {
-        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-        stopSelf()
-    }
+    override fun onTimeout(startId: Int, fgsType: Int) { finish() }
 
     companion object {
         const val NOTIF_ID = 3001

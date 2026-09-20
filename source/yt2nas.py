@@ -7,8 +7,8 @@
 (الشيخ والسلسلة يُنشآن إن لم يوجدا؛ الدرس الموجود بمفتاح t-yt-<id> أو بمصدر يوتيوب نفسه يُحدَّث لا يُكرَّر) ونشره للجميع.
 
 الاستعمال:
-  yt2nas.py --playlist "https://www.youtube.com/playlist?list=..." --sheekh "الشيخ …" --series "شرح …" --super-pin 12345678 [--video] [--slug tawheed]
-  (أو --admin USER --pin PIN لمشرف عادي)
+  ADMIN_PIN=… yt2nas.py --playlist "https://www.youtube.com/playlist?list=..." --sheekh "الشيخ …" --series "شرح …" [--video] [--slug tawheed]
+  (أو --admin USER لمشرف عادي؛ الرقم السري من متغير البيئة ADMIN_PIN — أو SUPER_PIN للمشرف العام كبقية السكربتات — حتى لا يظهر في ps ولا في سجل الأوامر)
 يُحفظ التقدم في yt2nas-state-<slug>.json فيمكن إعادة التشغيل للمتابعة.
 """
 import argparse, base64, hashlib, json, os, re, subprocess, sys, time, urllib.parse, urllib.request, uuid, http.cookiejar
@@ -96,18 +96,18 @@ def main():
     ap.add_argument('--sheekh', required=True); ap.add_argument('--series', required=True); ap.add_argument('--type', default='')
     ap.add_argument('--slug', default='')
     ap.add_argument('--video', action='store_true', help='فيديو 360p mp4 بدل الصوت')
-    ap.add_argument('--admin', default='admin'); ap.add_argument('--pin', dest='pin'); ap.add_argument('--super-pin', dest='super_pin')
+    ap.add_argument('--admin', default='admin'); ap.add_argument('--pin', dest='pin', default=os.environ.get('ADMIN_PIN')); ap.add_argument('--super-pin', dest='super_pin', default=os.environ.get('SUPER_PIN'))
     ap.add_argument('--workdir', default='yt2nas-work')
     ap.add_argument('--no-publish', action='store_true')
     a = ap.parse_args()
-    pin = a.super_pin or a.pin
-    if not pin: raise SystemExit('يلزم --super-pin أو --pin')
+    pin = (a.super_pin or a.pin) if a.admin == 'admin' else (a.pin or a.super_pin)  # SUPER_PIN المصدَّر لا يطغى على رقم مشرف عادي
+    if not pin: raise SystemExit('يلزم الرقم السري: متغير البيئة SUPER_PIN أو ADMIN_PIN')
 
     # ١) مفتاح الخادم من admins.json بالرقم السري
     reg = json.loads(fetch_share(ADMINS_URL))
     entry = at.find(reg, a.admin)
     if not entry: raise SystemExit('لا يوجد مشرف ' + a.admin)
-    key = at.derive(pin, base64.b64decode(entry['salt']), reg['kdf']['iterations'])
+    key = at.derive(pin, base64.b64decode(entry['salt']), at.iters(reg))
     if at.verifier(key) != entry['hash']: raise SystemExit('الرقم السري غير صحيح')
     lines = at.unwrap(key, entry['wrapped']).split('\n')
     nas = Nas(lines[0], lines[1])
@@ -115,13 +115,16 @@ def main():
 
     # ٢) قائمة التشغيل
     pl = ytdlp_json(['--flat-playlist', a.playlist])
-    entries = [e for e in pl.get('entries', []) if e.get('id')]
+    entries = [e for e in pl.get('entries', []) if re.fullmatch(r'[A-Za-z0-9_-]{11}', e.get('id') or '')]  # المعرّف يدخل في اسم الملف
     if not entries: raise SystemExit('القائمة فارغة')
     slug = a.slug or re.sub(r'[^A-Za-z0-9_-]', '', 'pl-' + hashlib.sha1((pl.get('id') or a.playlist).encode()).hexdigest()[:10])
     print('القائمة: %s — %d فيديو — المجلد media/%s' % (pl.get('title'), len(entries), slug))
     os.makedirs(a.workdir, exist_ok=True)
     state_path = os.path.join(a.workdir, 'yt2nas-state-%s.json' % slug)
     state = json.load(open(state_path, encoding='utf-8')) if os.path.exists(state_path) else {}
+
+    def save_state():  # كتابة ذرّية: انقطاع أثناء الكتابة لا يفسد ملف التقدم
+        json.dump(state, open(state_path + '.tmp', 'w', encoding='utf-8'), ensure_ascii=False, indent=1); os.replace(state_path + '.tmp', state_path)
 
     # ٣) لكل فيديو: تنزيل → رفع → رابط
     folder = ROOT + '/media/' + slug
@@ -140,20 +143,22 @@ def main():
                 if p.returncode == 0 and os.path.exists(local): break
                 print('  تنزيل %s تعذر (محاولة %d): %s' % (vid, attempt + 1, p.stderr.strip()[-200:])); time.sleep(5 * (attempt + 1))
             else:
-                state[vid] = {'error': 'download'}; json.dump(state, open(state_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=1); continue
+                state[vid] = {'error': 'download'}; save_state(); continue
         size = os.path.getsize(local)
         print('%03d %s: رفع %.1f م.ب…' % (i, title[:40], size / 1e6))
         remote = nas.upload(local, folder, name, 'video/mp4' if a.video else 'audio/mp4')
         link = nas.share(remote)
         dur = e.get('duration') or 0
         state[vid] = {'title': title, 'link': link, 'size': size, 'duration': dur, 'ordinal': i}
-        json.dump(state, open(state_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+        save_state()
         os.remove(local)
         print('     ✓', link)
 
     # ٤) دمج في shared-content.json ونشره
     if a.no_publish: print('لم يُنشر (--no-publish)'); return
     shared = json.loads(fetch_share(SHARED_URL))
+    if shared.get('format') != 'ahl-alhadeeth-pack': raise SystemExit('shared-content.json المجلوب ليس حزمة صالحة — لم يُنشر شيء')
+    removed = set(shared.get('removed', []))
     sheekhs = shared.setdefault('sheekhs', [])
     so = next((s for s in sheekhs if s.get('name') == a.sheekh), None)
     if not so:
@@ -165,7 +170,7 @@ def main():
     n_new = n_upd = 0
     for e in entries:
         vid = e['id']; st = state.get(vid)
-        if not st or not st.get('link'): continue
+        if not st or not st.get('link') or 't-yt-' + vid in removed: continue  # لا نُعيد درسًا حذفه مشرف
         src = 'https://www.youtube.com/watch?v=' + vid
         tp = next((t for t in tapes if t.get('key') == 't-yt-' + vid or vid in t.get('source_url', '') or vid in t.get('media_url', '')), None)
         if tp is None:

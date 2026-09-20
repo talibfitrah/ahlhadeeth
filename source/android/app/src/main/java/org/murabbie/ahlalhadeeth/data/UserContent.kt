@@ -52,15 +52,18 @@ class UserContent(private val db: Db) {
         return prefix + "-" + b.joinToString("") { "%02x".format(it) }
     }
 
-    /** هل توجد تغييرات لم تُنشر؟ */
-    suspend fun hasPendingChanges(): Boolean =
-        db.count("SELECT COUNT(*) FROM u_chapter WHERE dirty <> 0").toInt() > 0 || db.count("SELECT COUNT(*) FROM u_removed").toInt() > 0
-
     suspend fun pendingCounts(): Pair<Int, Int> = db.count("SELECT COUNT(*) FROM u_chapter WHERE dirty <> 0").toInt() to db.count("SELECT COUNT(*) FROM u_removed").toInt()
 
-    suspend fun markAllClean() {
-        db.exec("UPDATE u_chapter SET dirty = 0")
-        db.exec("DELETE FROM u_removed")
+    /** قبل التصدير للنشر: المعلَّق الآن يُعلَّم 2 «قيد النشر»، وأي تعديل أثناء الرفع يعيده 1 (markDirty) فلا يمسحه markPublished. يعيد مفاتيح الحذف المرسَلة. */
+    suspend fun markPublishing(): List<String> {
+        db.exec("UPDATE u_chapter SET dirty = 2 WHERE dirty <> 0")
+        return removedKeys()
+    }
+
+    /** بعد نجاح الرفع: يُنظَّف ما أُرسل فقط؛ إن فشل الرفع بقيت 2 معلَّقة (dirty <> 0) فلا يضيع شيء */
+    suspend fun markPublished(removedSent: List<String>) {
+        db.exec("UPDATE u_chapter SET dirty = 0 WHERE dirty = 2")
+        for (k in removedSent) db.exec("DELETE FROM u_removed WHERE key = ?", k)
         bump()
     }
 
@@ -438,7 +441,7 @@ class UserContent(private val db: Db) {
         }
         val sheekhsArr = o.optJSONArray("sheekhs") ?: JSONArray()
         for (i in 0 until sheekhsArr.length()) {
-            val so = sheekhsArr.getJSONObject(i)
+            val so = sheekhsArr.optJSONObject(i) ?: continue // عنصر معطوب يُتخطى ولا يقطع الاستيراد
             val sname = so.optString("name").trim()
             if (sname.isEmpty()) continue
             val skey = so.optString("key", "")
@@ -447,7 +450,7 @@ class UserContent(private val db: Db) {
             if (sid == null) { sid = addSheekh(sname, skey, origin); ns++ } else if (shared) db.exec("UPDATE u_sheekh SET name = ? WHERE id = ? AND origin = 'shared'", sname, sid)
             val seriesArr = so.optJSONArray("series") ?: JSONArray()
             for (j in 0 until seriesArr.length()) {
-                val bo = seriesArr.getJSONObject(j)
+                val bo = seriesArr.optJSONObject(j) ?: continue
                 val bname = bo.optString("name").trim()
                 if (bname.isEmpty()) continue
                 val bkey = bo.optString("key", "")
@@ -456,7 +459,7 @@ class UserContent(private val db: Db) {
                 if (bid == null) { bid = addBook(sid, bname, bo.optString("type", ""), bkey, origin); nb++ } else if (bo.has("type")) db.exec("UPDATE u_book SET type_name = ? WHERE id = ?", bo.optString("type", ""), bid)
                 val tapes = bo.optJSONArray("tapes") ?: JSONArray()
                 for (k in 0 until tapes.length()) {
-                    val to = tapes.getJSONObject(k)
+                    val to = tapes.optJSONObject(k) ?: continue
                     val title = to.optString("title").trim().ifEmpty { "درس ${ArabicText.arabicDigits(k + 1)}" }
                     val key = to.optString("key", "")
                     val url = to.optString("media_url", to.optString("url", "")).trim()
@@ -465,6 +468,8 @@ class UserContent(private val db: Db) {
                     val notes = to.optString("notes", "")
                     val sourceUrl = to.optString("source_url", "")
                     if (shared && key.isNotEmpty() && key in localTombstones) continue // حُذف محليًا وينتظر النشر
+                    // غير http(s) يُفتح لاحقًا مسارًا محليًا (file:/content:) على جهاز المتلقي وقد يُرفع عند التفريغ؛ لا يُقبل من حزمة مشتركة (روابط يوتيوب https فتمرّ)
+                    if (shared && url.isNotEmpty() && !url.startsWith("http://", true) && !url.startsWith("https://", true)) continue
                     var cid = if (key.isNotEmpty()) db.queryOne("SELECT id FROM u_chapter WHERE key = ?", key) { it.int(0) } else null
                     if (cid == null && url.isNotEmpty()) cid = db.queryOne("SELECT id FROM u_chapter WHERE book_id = ? AND media_uri = ?", bid, url) { it.int(0) }
                     // درس محلي يُشغَّل من يوتيوب ووصلت نسخته المنقولة إلى الخادم (source_url = رابط يوتيوب نفسه): يُرقّى في مكانه
@@ -477,6 +482,8 @@ class UserContent(private val db: Db) {
                         upgraded = cid != null
                     }
                     var incomingSegs = to.optJSONArray("segments") ?: JSONArray()
+                    // المفضلة والملاحظات تشير إلى معرّف المقطع: المقطع الذي لم يتغير (الزمن والعنوان) يُعاد إدراجه بمعرّفه القديم
+                    val oldIds = HashMap<Pair<Long, String>, MutableList<Long>>()
                     if (cid != null) {
                         if (shared && !upgraded) {
                             val localDirty = db.queryOne("SELECT dirty FROM u_chapter WHERE id = ?", cid) { it.bool(0) } ?: false
@@ -489,6 +496,7 @@ class UserContent(private val db: Db) {
                         if (upgraded && incomingSegs.length() == 0 && localSegCount > 0) {
                             incomingSegs = JSONArray() // نُبقي الفهرس المحلي
                         } else {
+                            db.query("SELECT id, offset_start, line FROM u_content WHERE chapter_id = ? ORDER BY id", cid) { Triple(it.long(0), it.long(1), it.text(2)) }.forEach { (id, st, ln) -> oldIds.getOrPut(st to ln) { ArrayList() }.add(id) }
                             db.exec("DELETE FROM u_content_cat WHERE content_id IN (SELECT id FROM u_content WHERE chapter_id = ?)", cid)
                             db.exec("DELETE FROM u_content WHERE chapter_id = ?", cid)
                         }
@@ -497,14 +505,14 @@ class UserContent(private val db: Db) {
                     }
                     val segs = incomingSegs
                     for (m in 0 until segs.length()) {
-                        val g = segs.getJSONObject(m)
+                        val g = segs.optJSONObject(m) ?: continue // وإلا بقي الدرس محذوف المقاطع أو ناقصها
                         val start = if (g.has("start_ms")) g.optLong("start_ms") else parseTime(g.optString("start", "0")) ?: 0L
                         val line = g.optString("line", g.optString("title", "")).trim()
                         if (line.isEmpty()) continue
                         val write = g.optString("write", "").ifBlank { null }
                         val cats = ArrayList<Int>()
                         g.optJSONArray("categories")?.let { arr -> for (x in 0 until arr.length()) cats.add(arr.optInt(x)) }
-                        addSegmentQuiet(cid, line, start, write, g.optBoolean("ques", false), g.optInt("hnum", 0), cats)
+                        addSegmentQuiet(cid, line, start, write, g.optBoolean("ques", false), g.optInt("hnum", 0), cats, oldIds[start to line]?.removeFirstOrNull())
                         nseg++
                     }
                     renumber(cid)
@@ -517,10 +525,11 @@ class UserContent(private val db: Db) {
         return ImportResult(ns, nb, nc, nseg, packName)
     }
 
-    private suspend fun addSegmentQuiet(uchapter: Int, line: String, offsetStart: Long, write: String?, ques: Boolean, hnum: Int, categories: List<Int>) {
+    /** keepId = معرّف قديم يُحافَظ عليه، أو null لمعرّف جديد تلقائي */
+    private suspend fun addSegmentQuiet(uchapter: Int, line: String, offsetStart: Long, write: String?, ques: Boolean, hnum: Int, categories: List<Int>, keepId: Long?) {
         db.exec(
-            "INSERT INTO u_content(chapter_id, seq, line, line_n, offset_start, offset_end, write, write_n, ques, hnum) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            uchapter, 0, line, ArabicText.normalize(line), offsetStart, 0, write, ArabicText.normalize(write ?: ""), ques, hnum
+            "INSERT INTO u_content(id, chapter_id, seq, line, line_n, offset_start, offset_end, write, write_n, ques, hnum) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            keepId, uchapter, 0, line, ArabicText.normalize(line), offsetStart, 0, write, ArabicText.normalize(write ?: ""), ques, hnum
         )
         if (categories.isNotEmpty()) {
             val id = db.count("SELECT last_insert_rowid()")

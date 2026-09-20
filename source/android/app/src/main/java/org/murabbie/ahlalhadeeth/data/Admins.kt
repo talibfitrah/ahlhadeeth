@@ -18,6 +18,8 @@ import javax.crypto.spec.SecretKeySpec
  */
 object AdminCrypto {
     const val ITERATIONS = 100_000
+    /** أقل طول لرقم سري جديد: admins.json عام، فالرقم القصير يُكسر بالتجربة خارج التطبيق (الأرقام القديمة الأقصر تبقى صالحة للدخول) */
+    const val MIN_PIN = 12
     private val rnd = SecureRandom()
 
     /** توحيد الأرقام (هندية/فارسية → لاتينية) وإزالة الفراغات */
@@ -29,7 +31,9 @@ object AdminCrypto {
         }
     }.filter { !it.isWhitespace() && it != '-' }.joinToString("")
 
-    fun randomPin(digits: Int = 8): String = (1..digits).map { ('0' + rnd.nextInt(10)) }.joinToString("")
+    // حروف صغيرة وأرقام بلا المتشابهات (0/o/1/l/i): ١٦ خانة ≈ ٧٩ بت بدل ٢٧ بت لثمانية أرقام
+    private const val PIN_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+    fun randomPin(): String = (1..16).map { PIN_ALPHABET[rnd.nextInt(PIN_ALPHABET.length)] }.joinToString("")
     fun randomBytes(n: Int): ByteArray = ByteArray(n).also { rnd.nextBytes(it) }
 
     private fun hmac(key: ByteArray, data: ByteArray): ByteArray =
@@ -110,7 +114,8 @@ class AdminRegistry(val root: JSONObject) {
 
     class AuthError(msg: String) : Exception(msg)
 
-    val iterations: Int get() = root.optJSONObject("kdf")?.optInt("iterations", AdminCrypto.ITERATIONS) ?: AdminCrypto.ITERATIONS
+    // الملف عام وغير موثوق: لا نقبل عدد دورات أقل من الافتراضي (وإلا أُضعفت البصمات الجديدة)
+    val iterations: Int get() = (root.optJSONObject("kdf")?.optInt("iterations", AdminCrypto.ITERATIONS) ?: AdminCrypto.ITERATIONS).coerceAtLeast(AdminCrypto.ITERATIONS)
     val updated: Long get() = root.optLong("updated", 0)
     val superUser: String get() = root.getJSONObject("super").optString("user", "admin")
 
@@ -135,7 +140,7 @@ class AdminRegistry(val root: JSONObject) {
 
     private fun setSecret(obj: JSONObject, pin: String, credential: String) {
         val p = AdminCrypto.normalizePin(pin)
-        require(p.length >= 4) { "الرقم السري قصير (٤ أرقام على الأقل)" }
+        require(p.length >= AdminCrypto.MIN_PIN) { "الرقم السري قصير (١٢ خانة على الأقل)" }
         val salt = AdminCrypto.randomBytes(16)
         val key = AdminCrypto.deriveKey(p, salt, iterations)
         obj.put("salt", AdminCrypto.b64(salt)).put("hash", AdminCrypto.verifier(key)).put("wrapped", AdminCrypto.wrap(key, credential)).put("updated", System.currentTimeMillis())
@@ -178,8 +183,6 @@ class AdminRegistry(val root: JSONObject) {
         setSecret(obj, pin, credential)
         touch()
     }
-
-    fun rename(user: String, name: String) { find(user)?.put("name", name.trim()); touch() }
 
     fun setActive(user: String, active: Boolean) {
         findAdmin(user)?.put("active", active)

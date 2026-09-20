@@ -108,7 +108,14 @@ fun createYouTubeWebView(context: android.content.Context, bridge: YtBridge): We
     settings.loadWithOverviewMode = true
     settings.useWideViewPort = true
     webChromeClient = WebChromeClient()
-    webViewClient = WebViewClient()
+    // روابط المشغّل (العنوان، شعار يوتيوب، شاشة النهاية) تُفتح خارج التطبيق لا داخل هذا الإطار الذي يحمل جسر JS
+    webViewClient = object : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
+            if (!request.isForMainFrame) return false
+            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, request.url).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            return true
+        }
+    }
     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
     setBackgroundColor(android.graphics.Color.BLACK)
     addJavascriptInterface(bridge, "Android")
@@ -146,9 +153,17 @@ fun YouTubeScreen(app: App, repo: Repository, nav: NavHostController, code: Int,
             webView.loadDataWithBaseURL("https://www.youtube.com", YouTube.playerHtml(id, null, startMs / 1000, autoplay = true), "text/html", "utf-8", null)
         }
     }
-    DisposableEffect(Unit) {
+    // شروط YouTube API: لا تشغيل في الخلفية — نوقف المشغّل عند مغادرة التطبيق أو إطفاء الشاشة
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
         webView.keepScreenOn = true
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) { runCatching { webView.evaluateJavascript("pauseVideo()", null) }; webView.onPause() }
+            else if (event == androidx.lifecycle.Lifecycle.Event.ON_START) webView.onResume()
+        }
+        lifecycle.addObserver(observer)
         onDispose {
+            lifecycle.removeObserver(observer)
             runCatching { webView.evaluateJavascript("pauseVideo()", null) }
             webView.keepScreenOn = false
             webView.destroy()

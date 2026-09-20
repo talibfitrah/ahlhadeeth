@@ -1,7 +1,6 @@
 package org.murabbie.ahlalhadeeth.ui.screens
 
 import android.content.Intent
-import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -69,7 +68,6 @@ import org.murabbie.ahlalhadeeth.data.Chapter
 import org.murabbie.ahlalhadeeth.data.NasHttp
 import org.murabbie.ahlalhadeeth.data.PackInfo
 import org.murabbie.ahlalhadeeth.data.Repository
-import org.murabbie.ahlalhadeeth.data.Segment
 import org.murabbie.ahlalhadeeth.data.Sheekh
 import org.murabbie.ahlalhadeeth.data.UserContent
 import org.murabbie.ahlalhadeeth.data.YouTube
@@ -206,15 +204,15 @@ fun UserContentScreen(app: App, repo: Repository, nav: NavHostController) {
                 "خروج", onConfirm = { confirmLogout = false; app.sharedSync.logout() }, onDismiss = { confirmLogout = false }, destructive = true,
             )
             if (showChangePin) InlineFormCard("تغيير رقمي السري", onDismiss = { showChangePin = false }) {
-                OutlinedTextField(value = newPin, onValueChange = { newPin = it }, label = { Text("الرقم السري الجديد (٤ أرقام على الأقل)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), visualTransformation = PasswordVisualTransformation())
-                OutlinedTextField(value = newPin2, onValueChange = { newPin2 = it }, label = { Text("تأكيد الرقم السري") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), visualTransformation = PasswordVisualTransformation())
+                OutlinedTextField(value = newPin, onValueChange = { newPin = it }, label = { Text("الرقم السري الجديد (١٢ خانة على الأقل، حروف وأرقام)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), visualTransformation = PasswordVisualTransformation())
+                OutlinedTextField(value = newPin2, onValueChange = { newPin2 = it }, label = { Text("تأكيد الرقم السري") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), visualTransformation = PasswordVisualTransformation())
                 if (newPin.isNotBlank() && newPin != newPin2) Text("الرقمان غير متطابقين", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = org.murabbie.ahlalhadeeth.data.AdminCrypto.normalizePin(newPin).length >= 4 && newPin == newPin2 && !sync.busy, onClick = {
+                    Button(enabled = org.murabbie.ahlalhadeeth.data.AdminCrypto.normalizePin(newPin).length >= org.murabbie.ahlalhadeeth.data.AdminCrypto.MIN_PIN && newPin == newPin2 && !sync.busy, onClick = {
                         val p = newPin; showChangePin = false; newPin = ""; newPin2 = ""
                         scope.launch { runCatching { app.sharedSync.changeOwnPin(p) }.onSuccess { message = "تم تغيير الرقم السري" }.onFailure { message = "تعذر التغيير: ${it.message}" } }
                     }) { Text("حفظ") }
-                    OutlinedButton(onClick = { val p = org.murabbie.ahlalhadeeth.data.AdminCrypto.randomPin(8); newPin = p; newPin2 = p; message = "الرقم المولَّد: ${ArabicText.arabicDigits(p)} — احفظه قبل الضغط على حفظ" }) { Text("توليد رقم عشوائي") }
+                    OutlinedButton(onClick = { val p = org.murabbie.ahlalhadeeth.data.AdminCrypto.randomPin(); newPin = p; newPin2 = p; message = "الرقم المولَّد: $p — احفظه قبل الضغط على حفظ" }) { Text("توليد رقم عشوائي") }
                     OutlinedButton(onClick = { showChangePin = false }) { Text("إلغاء") }
                 }
                 message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
@@ -245,7 +243,7 @@ fun UserContentScreen(app: App, repo: Repository, nav: NavHostController) {
                             OutlinedTextField(
                                 value = loginPass, onValueChange = { loginPass = it }, label = { Text("الرقم السري") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                                 visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                                 trailingIcon = { TextButton(onClick = { showPass = !showPass }) { Text(if (showPass) "إخفاء" else "إظهار") } },
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """تحويل قواعد Access لبرنامج «أهل الحديث والأثر» ٤٫١٤٫٠ إلى قاعدة SQLite واحدة مع فهرس FTS5."""
-import csv, os, re, sqlite3, sys, time, unicodedata
+import csv, os, re, sqlite3, sys, time
 
 csv.field_size_limit(10**9)
 SRC = '/home/claude/alathar/csv'

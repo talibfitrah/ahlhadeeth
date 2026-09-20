@@ -105,7 +105,8 @@ fun SettingsScreen(app: App, repo: Repository, nav: NavHostController) {
                                     val dv = m.data?.version ?: ""
                                     sb.append("إصدار البيانات على NAS: ").append(dv.ifBlank { "غير محدد" })
                                     sb.append(if (dv.isNotBlank() && dv != app.dataManager.installedVersion) " (يوجد تحديث)" else " (مطابق للمثبَّت)")
-                                    m.app?.let { a ->
+                                    // نسخة المتجر لا تعرض إصدار APK على NAS ولا رابط تنزيله: التحديث من المتجر وحده (سياسة Play)
+                                    if (BuildConfig.DISTRIBUTION != "play") m.app?.let { a ->
                                         sb.append("\nإصدار التطبيق على NAS: ").append(a.versionName)
                                         if (a.versionCode > BuildConfig.VERSION_CODE) sb.append(" (أحدث من نسختك ${BuildConfig.VERSION_NAME})")
                                     }
@@ -119,11 +120,13 @@ fun SettingsScreen(app: App, repo: Repository, nav: NavHostController) {
                         }) { Text(if (checking) "جارٍ الفحص…" else "فحص التحديثات") }
                     }
                     checkResult?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                    val rel = manifest?.app
+                    val rel = manifest?.app.takeIf { BuildConfig.DISTRIBUTION != "play" }
                     if (rel != null && rel.versionCode > BuildConfig.VERSION_CODE) {
                         val url = rel.apkArm64.ifBlank { rel.apkUniversal }
-                        if (url.isNotBlank()) OutlinedButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }) { Text("تنزيل نسخة التطبيق الجديدة ${rel.versionName}") }
+                        if (url.isNotBlank()) OutlinedButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }) { Text("تنزيل نسخة التطبيق الجديدة ${rel.versionName}") }
                     }
+                    val redownloadError by app.dataManager.redownloadError.collectAsState()
+                    redownloadError?.let { Text("تعذرت إعادة التنزيل، والبيانات الحالية باقية: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { confirmRedownload = true }) { Text("إعادة تنزيل البيانات") }
                         TextButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, contentDescription = null); Text("حذف البيانات") }

@@ -67,14 +67,18 @@ class PlayerHolder(private val context: Context) {
         else -> "تعذر التشغيل: ${e.message ?: e.errorCodeName}"
     }
 
+    private var connecting = false // قبل init: المُهيِّئات تُنفَّذ بترتيب النص
+
     init {
         connect()
     }
 
     private fun connect() {
+        connecting = true
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         future.addListener({
+            connecting = false
             try {
                 val c = future.get()
                 controller = c
@@ -93,7 +97,7 @@ class PlayerHolder(private val context: Context) {
         val c = controller
         if (c != null && c.isConnected) block(c) else {
             pending.add(block)
-            if (c != null && !c.isConnected) {
+            if (!connecting) { // انقطع الاتصال، أو فشل الاتصال الأول فلم يُعَد قط
                 controller = null
                 connect()
             }
@@ -212,7 +216,7 @@ class PlayerHolder(private val context: Context) {
      */
     fun play(chapter: Chapter, startMs: Long = 0, playlist: List<Chapter>? = null) {
         val app = App.instance
-        val useList = if (app.settings.value.autoPlayNext && playlist != null && playlist.any { it.code == chapter.code }) playlist else listOf(chapter)
+        val useList = if (app.settings.value.autoPlayNext && playlist != null && playlist.any { it.code == chapter.code }) playlist.filter { !it.isYouTube || it.code == chapter.code } else listOf(chapter) // دروس يوتيوب لا يشغّلها ExoPlayer
         playlistChapters = useList
         _state.value = _state.value.copy(error = null, chapter = chapter, positionMs = startMs)
         val c0 = controller

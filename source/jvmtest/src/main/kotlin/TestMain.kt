@@ -14,6 +14,9 @@ import java.io.SequenceInputStream
 import java.util.Collections
 import java.util.zip.GZIPInputStream
 
+// مجلد مؤقت للاختبارات على أي جهاز
+val scratchDir = File(System.getProperty("java.io.tmpdir"), "ahl-jvmtest").apply { mkdirs() }
+
 fun check(cond: Boolean, msg: String) {
     if (!cond) throw AssertionError("FAILED: $msg") else println("ok: $msg")
 }
@@ -90,13 +93,13 @@ fun main(args: Array<String>) = runBlocking {
         t = System.currentTimeMillis()
         val r2 = repo.search(SearchOptions("بدعة صلاة", matchAll = true, sheekhIds = setOf(6), limit = 50))
         println("search بدعة+صلاة (uthaymeen): ${r2.size} in ${System.currentTimeMillis() - t} ms")
-        check(r2.all { it.chapter.sheekhId == 6 }, "sheekh filter works")
+        check(r2.isNotEmpty() && r2.all { it.chapter.sheekhId == 6 }, "sheekh filter works")
         val r3 = repo.search(SearchOptions("إنما الأعمال بالنيات", exactPhrase = true, limit = 20))
         println("exact phrase: ${r3.size}; first: ${r3.firstOrNull()?.segment?.line?.take(80)}")
         check(r3.isNotEmpty(), "exact phrase search")
         val r4 = repo.search(SearchOptions("الوضوء", inLine = true, inWrite = false, questionsOnly = true, limit = 20))
         println("questions only line search: ${r4.size}")
-        check(r4.all { it.segment.ques }, "questions-only filter")
+        check(r4.isNotEmpty() && r4.all { it.segment.ques }, "questions-only filter")
         t = System.currentTimeMillis()
         val r5 = repo.literalSearch(SearchOptions("سلفي", sheekhIds = setOf(2), inWrite = true, limit = 50)) { }
         println("literal search سلفي (shanqiti): ${r5.size} in ${System.currentTimeMillis() - t} ms")
@@ -114,7 +117,7 @@ fun main(args: Array<String>) = runBlocking {
 
     if (mode == "user") {
         // ---------- المحتوى المضاف: حزمة، فهرس نصي، دمج في المستودع ----------
-        val udbFile = File("/tmp/claude-0/-home-claude/05351d93-98bc-5059-844e-6845587e9cea/scratchpad/jvm_user.db")
+        val udbFile = File(scratchDir, "jvm_user.db")
         udbFile.delete()
         val udb = Db(udbFile.absolutePath, readOnly = false)
         val uc = org.murabbie.ahlalhadeeth.data.UserContent(udb)
@@ -168,7 +171,7 @@ fun main(args: Array<String>) = runBlocking {
 
         // تصدير ثم استيراد في قاعدة أخرى
         val json = uc.exportPack(null, "اختبار")
-        val udb2 = File("/tmp/claude-0/-home-claude/05351d93-98bc-5059-844e-6845587e9cea/scratchpad/jvm_user2.db"); udb2.delete()
+        val udb2 = File(scratchDir, "jvm_user2.db"); udb2.delete()
         val uc2 = org.murabbie.ahlalhadeeth.data.UserContent(Db(udb2.absolutePath, readOnly = false)); uc2.init()
         val res = uc2.importPack(json)
         check(res.sheekhs == 1 && res.books == 1 && res.chapters == 1 && res.segments == 4, "import result $res")
@@ -186,7 +189,7 @@ fun main(args: Array<String>) = runBlocking {
     if (mode == "net") {
         // ---------- تنزيل جزء من NAS عبر رابط المشاركة مع الاستئناف ----------
         val url = args.getOrElse(2) { "https://files.murabbie.org/fsdownload/yuS07Yrll/ahl_alhadeeth.db.gz.007" }
-        val dest = File("/tmp/claude-0/-home-claude/05351d93-98bc-5059-844e-6845587e9cea/scratchpad/jvm_part7.bin")
+        val dest = File(scratchDir, "jvm_part7.bin")
         dest.delete()
         val manifest = NasHttp.fetchText("https://files.murabbie.org/fsdownload/gIX4l2mhu/manifest.json")
         check(manifest.contains("\"parts\""), "manifest fetched (${manifest.length} bytes)")
@@ -210,8 +213,8 @@ fun main(args: Array<String>) = runBlocking {
 
     if (mode == "gz") {
         // ---------- فك ضغط الأجزاء المتسلسلة ----------
-        val parts = (1..7).map { File("/home/claude/alathar/build/ahl_alhadeeth.db.gz.%03d".format(it)) }
-        val out = File("/tmp/claude-0/-home-claude/05351d93-98bc-5059-844e-6845587e9cea/scratchpad/jvm_unpacked.db")
+        val parts = (1..7).map { File(File(dbPath).absoluteFile.parentFile, "ahl_alhadeeth.db.gz.%03d".format(java.util.Locale.ROOT, it)) }
+        val out = File(scratchDir, "jvm_unpacked.db")
         val streams = Collections.enumeration(parts.map { it.inputStream() as InputStream })
         val t = System.currentTimeMillis()
         GZIPInputStream(SequenceInputStream(streams), 256 * 1024).use { gz -> FileOutputStream(out).use { o -> gz.copyTo(o, 1024 * 1024) } }
@@ -383,6 +386,9 @@ print(base64.b64encode(field(80226972,2,inner)).decode())
         val ac = org.murabbie.ahlalhadeeth.data.AdminCrypto
         // ---------- التشفير ----------
         check(ac.normalizePin(" ١٢٣٤ 5678 ") == "12345678" && ac.normalizePin("۱۲-۳۴") == "1234", "normalize pin")
+        check(ac.normalizePin(" aB-٣c ") == "aB3c", "normalize pin keeps letters and their case (same as admins_tool.py norm_pin)")
+        val rp = ac.randomPin()
+        check(rp.length == 16 && rp.all { it in "abcdefghjkmnpqrstuvwxyz23456789" } && ac.normalizePin(rp) == rp && rp != ac.randomPin(), "random pin: 16 unambiguous lowercase alphanumerics: $rp")
         val salt = ac.randomBytes(16)
         var t0 = System.currentTimeMillis()
         val k1 = ac.deriveKey("12345678", salt)
@@ -396,45 +402,53 @@ print(base64.b64encode(field(80226972,2,inner)).decode())
         val w = ac.wrap(k1, "manus\nsecret")
         check(ac.unwrap(k1, w) == "manus\nsecret" && ac.unwrap(ac.deriveKey("0000", salt), w) == null, "wrap/unwrap + wrong key rejected")
         // ---------- السجل ----------
-        val reg = org.murabbie.ahlalhadeeth.data.AdminRegistry.create("admin", "المشرف العام", "1111 2222", "manus\npw")
+        val reg = org.murabbie.ahlalhadeeth.data.AdminRegistry.create("admin", "المشرف العام", "1111 2222 3333", "manus\npw")
         val text1 = reg.toText()
         val reg2 = org.murabbie.ahlalhadeeth.data.AdminRegistry.parse(text1)
-        val auth = reg2.authenticate("admin", "١١١١٢٢٢٢")
+        val auth = reg2.authenticate("admin", "١١١١٢٢٢٢٣٣٣٣")
         check(auth.role == "super" && auth.credential == "manus\npw" && auth.name == "المشرف العام", "super login with arabic digits")
-        check(runCatching { reg2.authenticate("admin", "11112223") }.exceptionOrNull()?.message == "الرقم السري غير صحيح", "wrong pin message")
+        check(runCatching { reg2.authenticate("admin", "111122223334") }.exceptionOrNull()?.message == "الرقم السري غير صحيح", "wrong pin message")
         check(runCatching { reg2.authenticate("ghost", "1234") }.exceptionOrNull()?.message == "لا يوجد مشرف بهذا الاسم", "unknown user message")
-        reg2.addAdmin("أحمد", "ahmad", "87654321", auth.credential, "admin")
-        check(runCatching { reg2.addAdmin("x", "ahmad", "1234", auth.credential, "admin") }.isFailure && runCatching { reg2.addAdmin("x", "admin", "1234", auth.credential, "admin") }.isFailure, "duplicate / super username rejected")
-        check(runCatching { reg2.addAdmin("x", "a b", "1234", auth.credential, "admin") }.isFailure && runCatching { reg2.addAdmin("x", "y", "123", auth.credential, "admin") }.isFailure, "spaces / short pin rejected")
-        val a1 = reg2.authenticate("ahmad", "87654321")
+        reg2.addAdmin("أحمد", "ahmad", "abcd87654321", auth.credential, "admin")
+        check(runCatching { reg2.addAdmin("x", "ahmad", "abcd12341234", auth.credential, "admin") }.isFailure && runCatching { reg2.addAdmin("x", "admin", "abcd12341234", auth.credential, "admin") }.isFailure, "duplicate / super username rejected")
+        check(runCatching { reg2.addAdmin("x", "a b", "abcd12341234", auth.credential, "admin") }.isFailure && runCatching { reg2.addAdmin("x", "y", "abcd1234123", auth.credential, "admin") }.isFailure && runCatching { reg2.addAdmin("x", "y", "٨٧٦٥ ٤٣٢١", auth.credential, "admin") }.isFailure && reg2.find("y") == null, "spaces / short pin (11 chars, old 8 digits) rejected")
+        val a1 = reg2.authenticate("ahmad", "abcd87654321")
         check(a1.role == "admin" && a1.credential == "manus\npw" && reg2.verify("ahmad", a1.key), "admin login + verify")
         reg2.setActive("ahmad", false)
-        check(!reg2.verify("ahmad", a1.key) && runCatching { reg2.authenticate("ahmad", "87654321") }.exceptionOrNull()?.message!!.contains("موقوف"), "disabled admin blocked")
+        check(!reg2.verify("ahmad", a1.key) && runCatching { reg2.authenticate("ahmad", "abcd87654321") }.exceptionOrNull()?.message!!.contains("موقوف"), "disabled admin blocked")
         reg2.setActive("ahmad", true)
-        reg2.setPin("ahmad", "5555", a1.credential)
-        check(!reg2.verify("ahmad", a1.key) && reg2.authenticate("ahmad", "5555").credential == "manus\npw", "pin reset invalidates old key")
+        reg2.setPin("ahmad", "efgh55555555", a1.credential)
+        check(!reg2.verify("ahmad", a1.key) && reg2.authenticate("ahmad", "efgh55555555").credential == "manus\npw", "pin reset invalidates old key")
         // تغيير حساب الخادم: المشرف العام يبقى، والمشرفون يحتاجون أرقامًا جديدة
         reg2.changeCredential(auth.key, "newuser\nnewpw")
-        check(reg2.authenticate("admin", "11112222").credential == "newuser\nnewpw", "super unwraps new credential")
-        check(reg2.entries().single().needsPin && runCatching { reg2.authenticate("ahmad", "5555") }.exceptionOrNull()?.message!!.contains("رقم سري جديد"), "admins need new pin after credential change")
-        reg2.setPin("ahmad", "6666", "newuser\nnewpw")
-        check(reg2.authenticate("ahmad", "6666").credential == "newuser\nnewpw", "admin works after new pin")
+        check(reg2.authenticate("admin", "111122223333").credential == "newuser\nnewpw", "super unwraps new credential")
+        check(reg2.entries().single().needsPin && runCatching { reg2.authenticate("ahmad", "efgh55555555") }.exceptionOrNull()?.message!!.contains("رقم سري جديد"), "admins need new pin after credential change")
+        reg2.setPin("ahmad", "jkmn66666666", "newuser\nnewpw")
+        check(reg2.authenticate("ahmad", "jkmn66666666").credential == "newuser\nnewpw", "admin works after new pin")
+        check(runCatching { reg2.setPin("ahmad", "6666", "newuser\nnewpw") }.isFailure && reg2.authenticate("ahmad", "jkmn66666666").credential == "newuser\nnewpw", "short new pin rejected, old one untouched")
         reg2.remove("ahmad")
         check(reg2.entries().isEmpty() && reg2.find("ahmad") == null, "remove admin")
+        // رقم قصير قديم (قبل حد ١٢ خانة) يبقى صالحًا للدخول؛ وعدد الدورات في الملف لا ينزل عن الافتراضي
+        val ls = ac.randomBytes(16); val lk = ac.deriveKey("1357", ls)
+        val legacy = org.murabbie.ahlalhadeeth.data.AdminRegistry.parse(org.json.JSONObject().put("format", "ahl-alhadeeth-admins").put("kdf", org.json.JSONObject().put("iterations", 1))
+            .put("super", org.json.JSONObject().put("user", "admin").put("salt", ac.b64(ls)).put("hash", ac.verifier(lk)).put("wrapped", ac.wrap(lk, "u\np"))).toString())
+        check(legacy.iterations == ac.ITERATIONS && legacy.authenticate("admin", "١٣٥٧").credential == "u\np", "legacy short pin still logs in; iterations floor ${legacy.iterations}")
         // ---------- التوافق مع أداة بايثون ----------
-        val scratch = File("/tmp/claude-0/-home-claude/05351d93-98bc-5059-844e-6845587e9cea/scratchpad")
+        val scratch = scratchDir
         val pyFile = File(scratch, "admins_py.json")
-        val tool = "/home/claude/alathar/admins_tool.py"
+        val tool = File("../admins_tool.py").absolutePath // أداة المستودع نفسها (يُشغَّل gradle من source/jvmtest)
         fun run(vararg a: String): String { val p = ProcessBuilder(listOf("python3", tool) + a).redirectErrorStream(true).start(); val out = p.inputStream.bufferedReader().readText(); check(p.waitFor() == 0, "python tool ${a.toList()} -> $out"); return out }
-        run("init", pyFile.absolutePath, "--super-pin", "24681357", "--nas-user", "manus", "--nas-pass", "pw!")
-        run("add", pyFile.absolutePath, "--user", "khalid", "--name", "خالد", "--pin", "1357", "--super-pin", "24681357")
+        run("init", pyFile.absolutePath, "--super-pin", "pqrs24681357", "--nas-user", "manus", "--nas-pass", "pw!")
+        run("add", pyFile.absolutePath, "--user", "khalid", "--name", "خالد", "--pin", "tuvw13571357", "--super-pin", "pqrs24681357")
         val regPy = org.murabbie.ahlalhadeeth.data.AdminRegistry.parse(pyFile.readText())
-        check(regPy.authenticate("admin", "24681357").credential == "manus\npw!" && regPy.authenticate("khalid", "١٣٥٧").credential == "manus\npw!", "kotlin reads python-made file")
+        check(regPy.authenticate("admin", "pqrs24681357").credential == "manus\npw!" && regPy.authenticate("khalid", "tuvw١٣٥٧١٣٥٧").credential == "manus\npw!", "kotlin reads python-made file")
         val ktFile = File(scratch, "admins_kt.json")
-        regPy.addAdmin("سعيد", "saeed", "9999", "manus\npw!", "admin")
+        regPy.addAdmin("سعيد", "saeed", "xyz999999999", "manus\npw!", "admin")
         ktFile.writeText(regPy.toText())
-        val out = run("check", ktFile.absolutePath, "--user", "saeed", "--pin", "9999")
+        val out = run("check", ktFile.absolutePath, "--user", "saeed", "--pin", "xyz999999999")
         check(out.contains("pin ok: True") && out.contains("credential user: manus"), "python reads kotlin-made entry: $out")
+        val shortPy = ProcessBuilder("python3", tool, "add", pyFile.absolutePath, "--user", "short", "--name", "x", "--pin", "87654321", "--super-pin", "pqrs24681357").redirectErrorStream(true).start()
+        check(shortPy.waitFor() != 0 && !pyFile.readText().contains("\"short\""), "python tool rejects short new pin too")
         println("ALL ADMIN TESTS PASSED")
     }
 
@@ -456,7 +470,7 @@ print(base64.b64encode(field(80226972,2,inner)).decode())
         check(plHtml.contains("listType: 'playlist', list: 'PLabc'") && plHtml.contains("videoId:undefined"), "playlist html")
 
         // ---------- الدمج المشترك: مشرف (A) ومستخدم (B) ----------
-        val scratch = File("/tmp/claude-0/-home-claude/05351d93-98bc-5059-844e-6845587e9cea/scratchpad")
+        val scratch = scratchDir
         val fa = File(scratch, "jvm_shared_a.db"); fa.delete()
         val fb = File(scratch, "jvm_shared_b.db"); fb.delete()
         val a = org.murabbie.ahlalhadeeth.data.UserContent(Db(fa.absolutePath, readOnly = false)); a.init()
@@ -472,8 +486,17 @@ print(base64.b64encode(field(80226972,2,inner)).decode())
         check(chA.isYouTube && chA.youtubeId == "dQw4w9WgXcQ" && chA.dirty && chA.origin == "local" && chA.key.startsWith("t-"), "youtube chapter model $chA")
         // «نشر» المشرف
         val pub1 = a.exportPack(null, "المحتوى المشترك", emptyList(), mapOf("id" to "shared-content", "pack_version" to 1))
-        a.markAllClean(); a.markAllShared()
+        a.markPublished(a.markPublishing()); a.markAllShared()
         check(a.pendingCounts() == (0 to 0) && a.chapter(c1)!!.origin == "shared" && !a.chapter(c1)!!.dirty, "admin clean after publish")
+        // تعديل يجري أثناء الرفع لا يُمسح بعلامة النشر
+        val fp = File(scratch, "jvm_pub.db"); fp.delete()
+        val p = org.murabbie.ahlalhadeeth.data.UserContent(Db(fp.absolutePath, readOnly = false)); p.init()
+        val ps = p.addSheekh("ش"); val pb = p.addBook(ps, "ك", "")
+        val p1 = p.addChapter(ps, pb, "١", "https://example.org/1.mp3", false); val p2 = p.addChapter(ps, pb, "٢", "https://example.org/2.mp3", false)
+        val sent = p.markPublishing()
+        p.addSegment(p2, "أثناء الرفع", 1000L, null, false, 0)
+        p.markPublished(sent)
+        check(!p.chapter(p1)!!.dirty && p.chapter(p2)!!.dirty && p.pendingCounts() == (1 to 0), "edit during upload stays pending: ${p.pendingCounts()}")
         // المستخدم يجلب
         val r1 = b.importPack(pub1, origin = "shared")
         check(r1.sheekhs == 1 && r1.books == 1 && r1.chapters == 2 && r1.segments == 2, "user first pull $r1")
@@ -481,7 +504,13 @@ print(base64.b64encode(field(80226972,2,inner)).decode())
         check(chB.size == 2 && chB.all { it.origin == "shared" && !it.dirty } && chB[0].isYouTube, "user chapters shared & clean: $chB")
         check(b.pendingCounts() == (0 to 0), "user has nothing pending")
         // إعادة الجلب نفسه لا يكرر
+        val idsBefore = b.segments(1).map { it.id }
         val r1b = b.importPack(pub1, origin = "shared")
+        check(idsBefore.isNotEmpty() && b.segments(1).map { it.id } == idsBefore, "re-pull keeps segment ids $idsBefore -> ${b.segments(1).map { it.id }}")
+        // عناصر معطوبة تُتخطى، ومسار file: في حزمة مشتركة يُرفض، وhttps يبقى
+        val evil = b.importPack("""{"format":"ahl-alhadeeth-pack","sheekhs":[7,{"name":"س","series":["x",{"name":"ب","tapes":[null,{"title":"خبيث","key":"t-evil","media_url":"file:///data/data/x/shared_prefs/shared_sync.xml","segments":[]},{"title":"سليم","key":"t-good","media_url":"HTTPS://example.org/a.mp3","segments":[5,{"start_ms":1,"line":"م"}]}]}]}]}""", origin = "shared")
+        check(evil.chapters == 1 && evil.segments == 1, "malformed elements skipped, file: url skipped, https kept: $evil")
+        b.importPack("""{"format":"ahl-alhadeeth-pack","removed":["t-good"],"sheekhs":[]}""", origin = "shared")
         check(r1b.chapters == 0 && b.stats().second == 2 && b.segments(1).size == 2, "re-pull idempotent $r1b ${b.stats()}")
         // المشرف يعدّل درسًا ويحذف آخر ثم ينشر
         a.updateChapter(c1, "الدرس الأول (معدَّل)", "https://youtu.be/dQw4w9WgXcQ", true, "")
@@ -491,7 +520,7 @@ print(base64.b64encode(field(80226972,2,inner)).decode())
         check(a.pendingCounts() == (1 to 1) && a.removedKeys() == listOf(keyC2), "admin pending after edit/delete ${a.pendingCounts()} ${a.removedKeys()}")
         val pub2 = a.exportPack(null, "المحتوى المشترك", emptyList(), mapOf("id" to "shared-content", "pack_version" to 2))
         check(org.json.JSONObject(pub2).getJSONArray("removed").getString(0) == keyC2, "tombstone exported")
-        a.markAllClean(); a.markAllShared()
+        a.markPublished(a.markPublishing()); a.markAllShared()
         val r2 = b.importPack(pub2, origin = "shared")
         val chB2 = b.chapters(1, 1)
         check(chB2.size == 1 && chB2[0].title == "الدرس الأول (معدَّل)" && b.segments(chB2[0].code.let { -it }).size == 3, "user got update + deletion: $chB2 ${r2}")

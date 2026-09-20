@@ -1,6 +1,6 @@
 # النشر على Google Play — خطوة خطوة
 
-هذا الدليل مبني على متطلبات Google Play كما هي في سبتمبر ٢٠٢٦ (يُستحسن مراجعة مركز سياسات Play قبل الرفع، فهي تتغير). الملف الجاهز للرفع: `builds/ahl-alhadeeth-1.7.7-play-release.aab` (نكهة `play`، موقَّع بمفتاح الإصدار، targetSdk 36، versionCode 18). لكل تحديث لاحق يُبنى ملف AAB جديد بـ `versionCode` أكبر.
+هذا الدليل مبني على متطلبات Google Play كما هي في سبتمبر ٢٠٢٦ (يُستحسن مراجعة مركز سياسات Play قبل الرفع، فهي تتغير). الملف الجاهز للرفع: `builds/ahl-alhadeeth-1.7.7-play-release.aab` (نكهة `play`، موقَّع بمفتاح الإصدار، targetSdk 36، versionCode 18) — **لا يُرفع هذا الملف:** بعد مراجعة ٢٠ سبتمبر ٢٠٢٦ صار الإصدار ١٫٧٫٨ (versionCode 19) ويجب بناؤه من المصدر الحالي. لكل تحديث لاحق يُبنى ملف AAB جديد بـ `versionCode` أكبر.
 
 ## ٠. قبل كل شيء: أمور تخص هذا التطبيق تحديدًا
 
@@ -50,7 +50,7 @@
 ```bash
 # ١. ارفع versionCode (١٩، ٢٠، …) وversionName في app/build.gradle.kts
 # ٢. ابنِ الحزمة:
-gradle :app:bundlePlayRelease -PmanifestUrl=… -PsharedUrl=… -PadminsUrl=…
+gradle :app:bundlePlayRelease -PmanifestUrl=… -PsharedUrl=… -PadminsUrl=… -PprivacyUrl=…
 # ٣. Play Console → Production → Create new release → ارفع ملف AAB الجديد
 ```
 وللتوزيع المباشر بالتوازي: `gradle :app:assembleDirectRelease` ثم رفع ملفات APK وتحديث `manifest.json` (بـ `make_manifest.py`) كما في دليل المستخدم — استعمل `versionCode` واحدًا للنكهتين في الإصدار الواحد.
@@ -59,7 +59,8 @@ gradle :app:bundlePlayRelease -PmanifestUrl=… -PsharedUrl=… -PadminsUrl=…
 
 - [ ] `versionCode` أكبر من السابق، والتوقيع بـ `release.keystore` نفسه.
 - [ ] البناء من نكهة `play` (`bundlePlayRelease`) لا `direct`.
-- [ ] لا مكتبة NewPipe في الحزمة (`unzip -p app.apk classes.dex | strings | grep -c schabi` ← ٠).
+- [ ] لا مكتبة NewPipe في الحزمة (`unzip -p app.apk 'classes*.dex' | grep -a -c schabi` ← ٠؛ والأمر نفسه على APK نكهة direct يجب أن يعطي رقمًا أكبر من صفر، وإلا فالفحص نفسه معطَّل).
+- [ ] رابط سياسة الخصوصية مضمَّن (`-PprivacyUrl`): `unzip -p app.apk 'classes*.dex' | grep -a -c '<نطاق الرابط>'` ← ١ فأكثر، ويظهر في «عن البرنامج».
 - [ ] الخدمات الأمامية `dataSync`/`mediaPlayback` فقط (لا `specialUse`).
 - [ ] targetSdk = آخر مستوى يشترطه المتجر (٣٦ حتى أغسطس ٢٠٢٧ على الأرجح).
 - [ ] اختبار على أندرويد ١٦ وعلى جهاز قديم.

@@ -7,8 +7,9 @@
 
 يلزم: python3، ffmpeg/ffprobe، مفتاح Gemini (من admins.json بالرقم السري للمشرف العام أو --gemini-key).
 الاستعمال:
-  python3 transcribe_series.py --super-pin 12345678 --series "شرح بلوغ المرام"      # سلسلة بعينها (جزء من الاسم يكفي)
-  python3 transcribe_series.py --super-pin … --all                                 # كل الدروس التي بلا فهرس
+  SUPER_PIN=… python3 transcribe_series.py --series "شرح بلوغ المرام"      # سلسلة بعينها (جزء من الاسم يكفي)
+  SUPER_PIN=… python3 transcribe_series.py --all                          # كل الدروس التي بلا فهرس
+  الأسرار من متغيرات البيئة (SUPER_PIN أو NAS_PASSWORD + GEMINI_KEY) حتى لا تظهر في ps ولا في سجل الأوامر.
   خيارات: --replace (استبدال الفهارس الموجودة)  --workers 2  --model gemini-3.6-flash  --no-publish  --limit N
 الحالة في transcribe_state.json فيُستأنف من حيث توقف. يتوقف رشيقًا بـ SIGTERM/SIGINT بعد إتمام الجاري.
 """
@@ -373,7 +374,7 @@ def transcribe_tape(gem, tape, workdir, sleep_s):
                 finally:
                     gem.delete(fname, ki)
             if not topics: raise RuntimeError('لا مواضع في رد Gemini للجزء %d' % (i + 1))
-            json.dump(topics, open(cache, 'w', encoding='utf-8'), ensure_ascii=False)
+            json.dump(topics, open(cache + '.tmp', 'w', encoding='utf-8'), ensure_ascii=False); os.replace(cache + '.tmp', cache)  # ذرّية: ملف مبتور يُفشل الدرس إلى الأبد
         last_end = segs[-1]['start'] if segs else -1
         for t in topics:
             s = t['start'] + offset
@@ -389,8 +390,8 @@ def transcribe_tape(gem, tape, workdir, sleep_s):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--super-pin', dest='super_pin'); ap.add_argument('--admin', default='admin')
-    ap.add_argument('--gemini-key', dest='gemini_key'); ap.add_argument('--user'); ap.add_argument('--password')
+    ap.add_argument('--super-pin', dest='super_pin', default=os.environ.get('SUPER_PIN')); ap.add_argument('--admin', default='admin')
+    ap.add_argument('--gemini-key', dest='gemini_key', default=os.environ.get('GEMINI_KEY')); ap.add_argument('--user'); ap.add_argument('--password', default=os.environ.get('NAS_PASSWORD'))
     ap.add_argument('--series', default=''); ap.add_argument('--sheekh', default=''); ap.add_argument('--all', action='store_true')
     ap.add_argument('--replace', action='store_true'); ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--workers', type=int, default=2); ap.add_argument('--model', default='gemini-3.5-flash'); ap.add_argument('--sleep', type=float, default=4)
@@ -402,14 +403,14 @@ def main():
     os.makedirs(a.workdir, exist_ok=True)
 
     # المفاتيح
-    user, pw, gkey = a.user, a.password, a.gemini_key
+    user, pw, gkey = a.user, a.password if a.user else None, a.gemini_key  # كلمة سر البيئة تخص --user المصرَّح به فقط
     if not (user and pw) or not gkey:
         if not a.super_pin: raise SystemExit('يلزم --super-pin (أو --user/--password مع --gemini-key)')
         sys.path.insert(0, HERE); import admins_tool as at
         reg = json.loads(fetch_share_text(ADMINS_URL))
         entry = at.find(reg, a.admin)
         if not entry: raise SystemExit('لا يوجد مشرف ' + a.admin)
-        k = at.derive(a.super_pin, base64.b64decode(entry['salt']), reg['kdf']['iterations'])
+        k = at.derive(a.super_pin, base64.b64decode(entry['salt']), at.iters(reg))
         if at.verifier(k) != entry['hash']: raise SystemExit('الرقم السري غير صحيح')
         lines = at.unwrap(k, entry['wrapped']).split('\n')
         user, pw = user or lines[0], pw or lines[1]
@@ -478,11 +479,13 @@ def main():
     by_key = {}
     for so, bo, tp in todo:
         if state.get(tid(tp), {}).get('segments') and tp.get('key'): by_key[tp['key']] = tp['segments']
+    if latest.get('format') != 'ahl-alhadeeth-pack': raise SystemExit('shared-content.json المجلوب ليس حزمة صالحة — لم يُنشر شيء')
     applied = 0
     for so in latest.get('sheekhs', []):
         for bo in so.get('series', []):
             for tp in bo.get('tapes', []):
                 if tp.get('key') in by_key: tp['segments'] = by_key[tp['key']]; applied += 1
+    if applied == 0: log('لا درس مطابق في أحدث نسخة — لم يُنشر شيء'); return
     latest['updated'] = int(time.time() * 1000); latest['published_by'] = 'transcribe:' + a.admin; latest['pack_version'] = int(time.time())
     Nas(user, pw).upload(json.dumps(latest, ensure_ascii=False, indent=1).encode('utf-8'), ROOT, 'shared-content.json')
     log('نُشر للجميع: %d درس بفهارسه وتفريغه' % applied)

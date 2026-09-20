@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """أدوات الرفع إلى NAS عبر واجهة DSM FileStation (files.murabbie.org:443)."""
-import json, os, sys, time, subprocess, urllib.parse, urllib.request
+import json, os, sys, time, subprocess
 
 BASE = 'https://files.murabbie.org/webapi'
 ACCOUNT = 'manus'
@@ -24,7 +24,7 @@ def curl(args, retries=6):
         else:
             print('  curl rc', p.returncode, p.stderr[:200], out[:200], file=sys.stderr)
         time.sleep(3 * (attempt + 1))
-    raise RuntimeError('curl failed: %s' % args[:3])
+    raise RuntimeError('curl failed: %s' % args[:2])  # العنصر الثالث قد يحمل _sid
 
 
 def sid():

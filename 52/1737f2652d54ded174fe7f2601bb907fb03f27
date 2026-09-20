@@ -1,0 +1,176 @@
+source/make_manifest.py
+  s_7a37be405a0e30::t_9a681cf11a4a27 3
+  s_7a37be405a0e30::t_b6cb1a9db152b0 26-27
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/screens/SettingsScreen.kt
+  s_7a37be405a0e30::t_62a72fcaca05cb 128-129
+  s_7a37be405a0e30::t_719aa5b4aa442f 108-109,123,126
+source/nas.py
+  s_7a37be405a0e30::t_7968a22c128984 27
+  s_7a37be405a0e30::t_8250a4578e9ef0 3
+SESSION_START_PROMPT.md
+  s_37e6ed22a3e6a3::t_04a3d797c60e8c 1-123
+source/run_transcribe_batch.sh
+  s_7a37be405a0e30::t_b6cb1a9db152b0 3,5
+source/jvmtest/src/main/kotlin/TestMain.kt
+  s_7a37be405a0e30::t_f4e5d356ce8d8c 216
+  s_7a37be405a0e30::t_a4a9d0226032a4 389-391,405,408,410,412-415,418,420-421,424-428,431-435,441-442,444,446,448,450-451
+  s_7a37be405a0e30::t_a49f6854c90f23 489,523
+  s_7a37be405a0e30::t_b9f627a61af45d 491-499
+  s_7a37be405a0e30::t_4ca136b537b518 17-19,96,102,120,174,192,217,437,439,473
+  s_7a37be405a0e30::t_e7c6cede51ff24 507,509-513
+source/transcribe_series.py
+  s_7a37be405a0e30::t_0e5c1e4213ad00 406,413
+  s_7a37be405a0e30::t_b6cb1a9db152b0 10-12,377,393-394,482,488
+source/android/app/build.gradle.kts
+  s_7a37be405a0e30::t_0893b3dd615b61 24-25
+  s_7a37be405a0e30::t_c6b44a4fac2b65 37-38
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/AutoIndexService.kt
+  s_7a37be405a0e30::t_74e4616a6e3fd7 29,37-38,43
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/TransferService.kt
+  s_7a37be405a0e30::t_74e4616a6e3fd7 29,38-39,44
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/TransferJob.kt
+  s_7a37be405a0e30::t_0b050f22db1c49 122-123,126,130,155-161,184,197,232,243,320-323
+04-نصوص-المتجر-وإجابات-النماذج.md
+  s_7a37be405a0e30::t_44d744ca3ffdb6 7-11,15-34,36-43,45,47,50,52,56,59,62
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/AppRoot.kt
+  s_7a37be405a0e30::t_f56cab41fac4b6 3,156-157
+  s_7a37be405a0e30::t_29d80c31d9a7de 21
+  s_7a37be405a0e30::t_9694b23b8e33e2 44,178
+source/yt2nas.py
+  s_7a37be405a0e30::t_a49f6854c90f23 11,99,104
+  s_7a37be405a0e30::t_7968a22c128984 10,118,126-128,146,153,160-161,173
+  s_7a37be405a0e30::t_0e5c1e4213ad00 110
+  s_7a37be405a0e30::t_948d829ce9f621 103
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/DownloadService.kt
+  s_7a37be405a0e30::t_62a72fcaca05cb 47
+  s_7a37be405a0e30::t_32dd86c2988c9e 72,118,123-125
+  s_7a37be405a0e30::t_da7dc4440a5ad0 103-107
+  s_7a37be405a0e30::t_582ae51d18eaea 32,45-46,74-75,85-87,91,100,109,122
+  s_7a37be405a0e30::t_0e5c1e4213ad00 41
+02-النشر-على-Google-Play.md
+  s_7a37be405a0e30::t_896dc3a8d12cb1 3,53,62-63
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/UserContent.kt
+  s_7a37be405a0e30::t_b9f627a61af45d 57-66
+  s_7a37be405a0e30::t_87db2920a84004 528-529,532
+  s_7a37be405a0e30::t_9be1386b01130c 444,453,462,471-472,485-486,499,508,515,531
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/MainActivity.kt
+  s_7a37be405a0e30::t_b2d69f64e690ee 26
+source/mirror_to_nas.py
+  s_7a37be405a0e30::t_48c534fcff79c3 15
+  s_7a37be405a0e30::t_0e5c1e4213ad00 165
+  s_e41acef12cdb79::t_f7a9062ef05d70 11-12,230-231
+01-دليل-المبرمج.md
+  s_7a37be405a0e30::t_896dc3a8d12cb1 3,33
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/screens/MoreScreens.kt
+  s_7a37be405a0e30::t_c6b44a4fac2b65 155-158
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/screens/YouTubeScreens.kt
+  s_7a37be405a0e30::t_2ecbdce4cd73fd 111-118,156-158,160-164,166
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/AutoIndex.kt
+  s_7a37be405a0e30::t_4f8f82c47608a8 181-182,188,220,231,269,274,291-293,329
+  s_7a37be405a0e30::t_ce9e96dabf6f08 442-443,485,489,540-541,652,655-656,663,678-679
+  s_e41acef12cdb79::t_f8dcee413aed2b 346-347
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/AudioDownloads.kt
+  s_7a37be405a0e30::t_582ae51d18eaea 29-31,44-45,82
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/Admins.kt
+  s_7a37be405a0e30::t_0e5c1e4213ad00 36
+  s_7a37be405a0e30::t_c4ac042e3f92c5 21-22,34-35,117-118,143
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/screens/UserContentScreens.kt
+  s_7a37be405a0e30::t_8584b202236015 207-208,211,215,246
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/player/PlayerHolder.kt
+  s_7a37be405a0e30::t_62a72fcaca05cb 70-71,77,81,100,219
+source/admins_tool.py
+  s_7a37be405a0e30::t_199f09742f2e75 20,59-60,78-82,111,118,127
+  s_7a37be405a0e30::t_aa8c2179398e4d 16
+  s_7a37be405a0e30::t_45a998d9dcfb40 10-12
+  s_7a37be405a0e30::t_0893b3dd615b61 14
+source/android/app/src/main/AndroidManifest.xml
+  s_7a37be405a0e30::t_b2d69f64e690ee 31
+README-دليل-المستخدم-والمشرف.md
+  s_7a37be405a0e30::t_896dc3a8d12cb1 98-111
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/DataDownloadService.kt
+  s_7a37be405a0e30::t_da7dc4440a5ad0 80,84
+  s_7a37be405a0e30::t_582ae51d18eaea 175-176
+  s_7a37be405a0e30::t_0e5c1e4213ad00 181
+CLAUDE.md
+  s_7a37be405a0e30::t_cf6d4dbdfcb0e2 95-104
+  s_7a37be405a0e30::t_896dc3a8d12cb1 3,67-68
+  s_37e6ed22a3e6a3::t_b325fc30521c5c 1-2,4-66,69-94,105-112,114-159
+  s_37e6ed22a3e6a3::t_85c0643f5a3b5d 113
+source/android/app/src/play/java/org/murabbie/ahlalhadeeth/data/YouTubeMedia.kt
+  s_7a37be405a0e30::t_0b050f22db1c49 17
+source/android/app/src/main/res/xml/file_paths.xml
+  s_7a37be405a0e30::t_c24016c757e373 3
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/screens/TapeTranscriptScreen.kt
+  s_7a37be405a0e30::t_9694b23b8e33e2 153
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/screens/BrowseScreens.kt
+  s_7a37be405a0e30::t_67c6803bd4176c 287
+source/sfx.py
+  s_7a37be405a0e30::t_7ed0f626e49cad 1,4
+03-سياسة-الخصوصية.md
+  s_7a37be405a0e30::t_0216800099680f 3,18-21,24,36,50-54,57
+  s_7a37be405a0e30::t_fea03d2a844cba 16,49
+  s_7a37be405a0e30::t_55a0d4e82cd780 17
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/YouTube.kt
+  s_7a37be405a0e30::t_8511be34df65a3 166-167,270-271
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/theme/Theme.kt
+  s_7a37be405a0e30::t_62a72fcaca05cb 89
+  s_7a37be405a0e30::t_9694b23b8e33e2 87-88,90-93
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/screens/AdminsScreen.kt
+  s_7a37be405a0e30::t_d37103e32c8144 74,97,101,109,112,126,151-152,156,160,163
+  s_7a37be405a0e30::t_88ac9d61e980df 95,108
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/SharedSync.kt
+  s_7a37be405a0e30::t_b9f627a61af45d 415,434-435,443-444
+  s_7a37be405a0e30::t_83af5caaf8af54 11,93,95-98,172,183
+  s_7a37be405a0e30::t_2464122c3b53ee 394-395,411-412,416-418,440-441
+  s_7a37be405a0e30::t_a72254b35f4f1f 94
+  s_7a37be405a0e30::t_62a72fcaca05cb 84,413
+source/convert.py
+  s_7a37be405a0e30::t_5bb328150785f3 4
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/ui/screens/SearchScreen.kt
+  s_7a37be405a0e30::t_d314f129fe9089 87-88,112,115-116,132-133,135-137
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/DataManager.kt
+  s_7a37be405a0e30::t_948d829ce9f621 306-307,310,312
+  s_7a37be405a0e30::t_62a72fcaca05cb 270,277,308-309,311,324,327,330,336-337,396,453,485
+  s_7a37be405a0e30::t_01febaa54ab1c7 120
+  s_7a37be405a0e30::t_da7dc4440a5ad0 37,173,181,186,201,260-261,304-305,313-315,320,323,325,340,370,393
+  s_7a37be405a0e30::t_eab01591da2708 71-72,88,106,274-276,280-281,288,319,322,328,331,361,372-374,411,492
+  s_7a37be405a0e30::t_0e5c1e4213ad00 318
+  s_7a37be405a0e30::t_ee2ff95be0f4b0 412
+  s_7a37be405a0e30::t_aeaee303627aec 338
+source/android/app/src/main/java/org/murabbie/ahlalhadeeth/data/ArabicText.kt
+  s_7a37be405a0e30::t_d9dcd38b1cdd9f 55
+source/android/app/src/main/res/xml/data_extraction_rules.xml
+  s_7a37be405a0e30::t_c4c81fc3656f4b 3-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "521737f2652d54ded174fe7f2601bb907fb03f27",
+  "prompts": {},
+  "sessions": {
+    "s_37e6ed22a3e6a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "29abf30f-c6e6-4086-869a-ab429287104f",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "talibfitrah <fitrahtvnl@gmail.com>"
+    },
+    "s_7a37be405a0e30": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7799165f-52c8-4534-a03e-e9260c4b7dca",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "talibfitrah <fitrahtvnl@gmail.com>"
+    },
+    "s_e41acef12cdb79": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a465df83b991937c5",
+        "model": "unknown"
+      },
+      "human_author": "talibfitrah <fitrahtvnl@gmail.com>"
+    }
+  }
+}

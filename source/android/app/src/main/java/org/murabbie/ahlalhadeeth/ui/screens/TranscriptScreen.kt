@@ -97,6 +97,7 @@ fun TranscriptScreen(app: App, repo: Repository, nav: NavHostController, content
             nav = nav,
             subtitle = ch?.let { "${it.sheekhName} — ${it.bookName}" },
             actions = {
+                if (ch != null) org.murabbie.ahlalhadeeth.ui.ReportAction(ch, s)
                 if (ch != null) IconButton(onClick = { nav.navigate(org.murabbie.ahlalhadeeth.ui.Routes.tapeText(ch.code, s?.seq ?: 0, query)) }) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.MenuBook, contentDescription = "التفريغ الكامل للشريط") }
                 IconButton(onClick = { fontSize = (fontSize - 1f).coerceAtLeast(12f) }) { Icon(Icons.Filled.TextDecrease, contentDescription = "تصغير الخط") }
                 IconButton(onClick = { fontSize = (fontSize + 1f).coerceAtMost(40f) }) { Icon(Icons.Filled.TextIncrease, contentDescription = "تكبير الخط") }

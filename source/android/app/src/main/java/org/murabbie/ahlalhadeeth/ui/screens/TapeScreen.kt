@@ -126,6 +126,7 @@ fun TapeScreen(app: App, repo: Repository, nav: NavHostController, code: Int, in
             subtitle = ch?.let { "${it.sheekhName} — ${it.bookName}" },
             actions = {
                 if (ch != null) {
+                    if (!canEdit) org.murabbie.ahlalhadeeth.ui.ReportAction(ch)
                     if (canEdit) {
                         IconButton(onClick = { nav.navigate(Routes.autoIndex(code)) }) { Icon(Icons.Filled.AutoAwesome, contentDescription = "فهرسة وتفريغ تلقائي") }
                         IconButton(onClick = { nav.navigate(Routes.pasteIndex(code)) }) { Icon(Icons.Filled.ContentPaste, contentDescription = "لصق فهرس نصي") }
@@ -261,7 +262,7 @@ fun shareText(ch: Chapter, s: Segment, write: String?): String {
     sb.append("الموضع: ").append(ArabicText.formatTime(s.offsetStart)).append('\n')
     sb.append(s.line).append('\n')
     if (!write.isNullOrBlank()) sb.append('\n').append(write).append('\n')
-    sb.append("\n(من برنامج أهل الحديث والأثر — alathar.net)")
+    if (!ch.isUser) sb.append("\n(من برنامج أهل الحديث والأثر — alathar.net)") // المحتوى المضاف ليس من البرنامج
     return sb.toString()
 }
 

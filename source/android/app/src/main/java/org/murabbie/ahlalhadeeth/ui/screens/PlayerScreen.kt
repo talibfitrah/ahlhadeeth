@@ -105,6 +105,7 @@ fun PlayerScreen(app: App, repo: Repository, nav: NavHostController) {
 
     Scaffold(topBar = {
         AppTopBar(ch?.let { "${it.displayTitle} (${it.fileName})" } ?: "المشغّل", nav, subtitle = ch?.let { "${it.sheekhName} — ${it.bookName}" }, actions = {
+            if (ch != null) org.murabbie.ahlalhadeeth.ui.ReportAction(ch)
             if (ch != null) IconButton(onClick = { nav.navigate(Routes.tape(ch.code)) }) { Icon(Icons.Filled.ListAlt, contentDescription = "فهرس الشريط") }
         })
     }) { padding ->

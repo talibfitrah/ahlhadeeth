@@ -94,7 +94,7 @@ fun AdminsScreen(app: App, repo: Repository, nav: NavHostController) {
 
     // الرقم السري حروف وأرقام لاتينية: يُعرض كما هو بلا تحويل إلى أرقام هندية
     fun shareText(name: String, user: String, pin: String) =
-        "تطبيق أهل الحديث والأثر — بيانات دخول المشرف\nالاسم: $name\nاسم المستخدم: $user\nالرقم السري: $pin\nالدخول من: المزيد ← المحتوى المضاف ← تسجيل دخول مشرف"
+        "تطبيق " + context.getString(org.murabbie.ahlalhadeeth.R.string.app_name) + " — بيانات دخول المشرف\nالاسم: $name\nاسم المستخدم: $user\nالرقم السري: $pin\nالدخول من: المزيد ← المحتوى المضاف ← تسجيل دخول مشرف"
 
     Scaffold(
         topBar = { AppTopBar("المشرفون", nav, subtitle = "المشرف العام: ${sync.adminName}") },

@@ -55,6 +55,21 @@ import androidx.navigation.NavHostController
 import org.murabbie.ahlalhadeeth.App
 import org.murabbie.ahlalhadeeth.data.ArabicText
 import org.murabbie.ahlalhadeeth.data.Chapter
+import org.murabbie.ahlalhadeeth.data.ContentReport
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import org.murabbie.ahlalhadeeth.BuildConfig
+import android.widget.Toast
 import org.murabbie.ahlalhadeeth.data.Segment
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -298,4 +313,46 @@ fun AutoIndexBanner(app: App, onOpen: () -> Unit) {
             }
         }
     }
+}
+
+/** زر «إبلاغ» (سياسة Play للمحتوى المولَّد بالذكاء الاصطناعي): يختار المستخدم السبب ويُرسَل البلاغ دون مغادرة التطبيق */
+@Composable
+fun ReportAction(ch: Chapter, segment: Segment? = null) {
+    if (ch.isUser && ch.origin == "local") return // محتوى على جهاز المشرف لم يُنشر: لا يراه غيره، ولا يُرسل نصه
+    var open by remember { mutableStateOf(false) }
+    IconButton(onClick = { open = true }) { Icon(Icons.Outlined.Flag, contentDescription = "إبلاغ عن المحتوى") }
+    if (!open) return
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var reason by remember { mutableStateOf(ContentReport.REASONS[1]) }
+    var sending by remember { mutableStateOf(false) }
+    val content = "${ch.displayTitle} — ${ch.sheekhName} — ${ch.bookName} [${ch.code}${if (ch.key.isNotBlank()) " ${ch.key}" else ""}]" +
+        (segment?.let { " — موضع ${it.seq}: ${it.line}" } ?: "") + " — v${BuildConfig.VERSION_NAME}"
+    AlertDialog(
+        onDismissRequest = { if (!sending) open = false },
+        title = { Text("إبلاغ عن المحتوى") },
+        text = {
+            Column {
+                Text(if (segment != null) "${ch.displayTitle} — ${segment.line}" else ch.displayTitle, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                ContentReport.REASONS.forEach { r ->
+                    Row(Modifier.fillMaxWidth().clickable { reason = r }, verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = reason == r, onClick = { reason = r })
+                        Text(r)
+                    }
+                }
+                Text("يُرسَل وصف المحتوى والسبب فقط، بلا أي بيانات عنك.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !sending, onClick = {
+                sending = true
+                scope.launch {
+                    val r = withContext(Dispatchers.IO) { runCatching { ContentReport.send(content, reason) } }
+                    sending = false; open = false
+                    Toast.makeText(context, if (r.isSuccess) "أُرسل البلاغ، جزاكم الله خيرًا" else "تعذر إرسال البلاغ؛ تحقق من الاتصال وأعد المحاولة", Toast.LENGTH_LONG).show()
+                }
+            }) { Text(if (sending) "جارٍ الإرسال…" else "إرسال") }
+        },
+        dismissButton = { TextButton(enabled = !sending, onClick = { open = false }) { Text("إلغاء") } },
+    )
 }

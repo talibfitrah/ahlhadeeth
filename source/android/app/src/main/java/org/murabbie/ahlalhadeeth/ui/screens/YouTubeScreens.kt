@@ -188,6 +188,7 @@ fun YouTubeScreen(app: App, repo: Repository, nav: NavHostController, code: Int,
         topBar = {
             AppTopBar(ch?.displayTitle ?: "يوتيوب", nav, subtitle = ch?.let { "${it.sheekhName} — ${it.bookName}" }, actions = {
                 if (ch != null && admin.isAdmin) IconButton(onClick = { nav.navigate(Routes.autoIndex(ch.code)) }) { Icon(Icons.Filled.AutoAwesome, contentDescription = "فهرسة وتفريغ تلقائي") }
+                if (ch != null) org.murabbie.ahlalhadeeth.ui.ReportAction(ch)
                 if (ch != null) IconButton(onClick = { nav.navigate(Routes.tape(ch.code)) }) { Icon(Icons.Filled.ListAlt, contentDescription = "شاشة الدرس") }
                 if (writes.isNotEmpty()) IconButton(onClick = { showTranscript = !showTranscript }) { Icon(if (showTranscript) Icons.Filled.Article else Icons.Outlined.Article, contentDescription = "التفريغ") }
             })

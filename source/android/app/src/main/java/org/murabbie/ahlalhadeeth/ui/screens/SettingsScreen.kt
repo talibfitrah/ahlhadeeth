@@ -214,7 +214,7 @@ fun SettingsScreen(app: App, repo: Repository, nav: NavHostController) {
                                 android.widget.Toast.makeText(context, "نُسخ السجل", android.widget.Toast.LENGTH_SHORT).show()
                             }) { Text("نسخ السجل") }
                             OutlinedButton(onClick = {
-                                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "سجل أعطال أهل الحديث والأثر").putExtra(Intent.EXTRA_TEXT, c), "إرسال السجل"))
+                                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "سجل أعطال " + context.getString(org.murabbie.ahlalhadeeth.R.string.app_name)).putExtra(Intent.EXTRA_TEXT, c), "إرسال السجل"))
                             }) { Text("إرسال") }
                             TextButton(onClick = { org.murabbie.ahlalhadeeth.data.CrashLog.clear(context); maintMsg = "مُسح السجل (${ArabicText.arabicDigits(System.currentTimeMillis() % 1000)})" }) { Text("مسح السجل") }
                         }

@@ -63,7 +63,7 @@ fun SetupScreen(app: App, state: DataState) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("أهل الحديث والأثر", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+        Text(androidx.compose.ui.res.stringResource(org.murabbie.ahlalhadeeth.R.string.app_name), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
         Text("الموسوعة الصوتية لدروس أهل العلم وفتاواهم", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
 

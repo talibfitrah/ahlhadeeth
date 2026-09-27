@@ -94,7 +94,7 @@ fun HomeScreen(app: App, repo: Repository, nav: NavHostController) {
     }
 
     Scaffold(topBar = {
-        AppTopBar("أهل الحديث والأثر", subtitle = "المشايخ والسلاسل العلمية", actions = {
+        AppTopBar(androidx.compose.ui.res.stringResource(org.murabbie.ahlalhadeeth.R.string.app_name), subtitle = "المشايخ والسلاسل العلمية", actions = {
             IconButton(onClick = { nav.navigate(Routes.HISTORY) }) { Icon(Icons.Filled.History, contentDescription = "سجل الاستماع") }
         })
     }) { padding ->

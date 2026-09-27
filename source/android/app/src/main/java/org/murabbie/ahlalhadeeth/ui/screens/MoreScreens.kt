@@ -138,7 +138,7 @@ fun AboutScreen(app: App, repo: Repository, nav: NavHostController) {
     LaunchedEffect(Unit) { meta = repo.meta() }
     Scaffold(topBar = { AppTopBar("عن البرنامج", nav) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text("أهل الحديث والأثر", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            Text(androidx.compose.ui.res.stringResource(org.murabbie.ahlalhadeeth.R.string.app_name), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
             Text("نسخة الأندرويد ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(12.dp))
             Text(
@@ -151,7 +151,7 @@ fun AboutScreen(app: App, repo: Repository, nav: NavHostController) {
             Spacer(Modifier.height(12.dp))
             Text("المشايخ الذين تضمهم الموسوعة: الألباني، وابن باز، والعثيمين، والفوزان، وعبد المحسن العباد، وصالح آل الشيخ، ومحمد أمان الجامي، ومشهور حسن آل سلمان، ومحمد المختار الشنقيطي، ومنصور الخالدي.", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(12.dp))
-            Text("الحقوق للقائمين على موقع أهل الحديث والأثر (ahl_alhadeeth@hotmail.com). الصوت يُبثّ من خادم الموقع http://www.alathar.net/files/sound/ ما لم يُغيَّر المصدر من الإعدادات.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("المصدر: برنامج «أهل الحديث والأثر» (alathar.net). تطبيق مستقل غير تابع للقائمين على الموقع. الصوت يُبثّ من خادم بيانات التطبيق، ويمكن اختيار خادم الموقع من الإعدادات.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (BuildConfig.PRIVACY_URL.isNotBlank()) {
                 val context = androidx.compose.ui.platform.LocalContext.current
                 androidx.compose.material3.TextButton(onClick = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(BuildConfig.PRIVACY_URL))) } }) { Text("سياسة الخصوصية") }

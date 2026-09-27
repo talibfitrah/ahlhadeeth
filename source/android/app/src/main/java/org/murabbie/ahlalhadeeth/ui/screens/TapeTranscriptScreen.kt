@@ -137,7 +137,7 @@ fun TapeTranscriptScreen(app: App, repo: Repository, nav: NavHostController, cod
         val c = ch ?: return ""
         val sb = StringBuilder()
         sb.append(c.sheekhName).append(" — ").append(c.bookName).append(" — ").append(c.displayTitle).append(" (").append(c.fileName).append(")\n")
-        sb.append("التفريغ الكامل للشريط — من برنامج أهل الحديث والأثر (alathar.net)\n\n")
+        sb.append(if (c.isUser) "التفريغ الكامل للدرس\n\n" else "التفريغ الكامل للشريط — من برنامج أهل الحديث والأثر (alathar.net)\n\n")
         segs?.forEach { s ->
             sb.append("[").append(ArabicText.formatTime(s.offsetStart)).append("] ").append(s.line).append('\n')
             writes[s.id]?.let { sb.append(it).append("\n\n") }
@@ -166,6 +166,7 @@ fun TapeTranscriptScreen(app: App, repo: Repository, nav: NavHostController, cod
             nav = nav,
             subtitle = ch?.let { "${it.sheekhName} — ${it.bookName}" },
             actions = {
+                if (ch != null) org.murabbie.ahlalhadeeth.ui.ReportAction(ch)
                 IconButton(onClick = { showSearch = !showSearch; if (!showSearch) query = "" }) { Icon(Icons.Filled.Search, contentDescription = "بحث في التفريغ") }
                 IconButton(onClick = { fontSize = (fontSize - 1f).coerceAtLeast(12f) }) { Icon(Icons.Filled.TextDecrease, contentDescription = "تصغير الخط") }
                 IconButton(onClick = { fontSize = (fontSize + 1f).coerceAtMost(40f) }) { Icon(Icons.Filled.TextIncrease, contentDescription = "تكبير الخط") }

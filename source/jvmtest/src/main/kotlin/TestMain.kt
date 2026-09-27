@@ -314,6 +314,14 @@ print(base64.b64encode(field(80226972,2,inner)).decode())
         println("ALL SHARE TESTS PASSED")
     }
 
+    if (mode == "report") {
+        // حيّ: بلاغ تجريبي واحد إلى نموذج البلاغات (لا يلمس NAS). حقول النموذج إلزامية، فخطأ رقم الحقل يعيد 400
+        val cr = org.murabbie.ahlalhadeeth.data.ContentReport
+        check(runCatching { cr.send("اختبار jvmtest (يُحذف)", cr.REASONS.last()) }.isSuccess, "report accepted by the form")
+        check(runCatching { cr.send("", cr.REASONS.last()) }.isFailure, "report with an empty field is rejected")
+        return@runBlocking
+    }
+
     if (mode == "segment") {
         // واجهة سطر أوامر لأداة النقل: json3 (+ وصف الفيديو) → مواضع JSON على المخرج القياسي
         val json3 = File(args[2]).readText()

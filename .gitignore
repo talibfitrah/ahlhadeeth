@@ -12,6 +12,8 @@ build/
 local.properties
 *.apk
 *.aab
+# قاعدة البيانات المضمَّنة في حزمة أصول Play (١٧٦ م.ب) — تُجلب من NAS قبل البناء
+source/android/dbpack/src/main/assets/db/*.gz
 __pycache__/
 .idea/
 .DS_Store

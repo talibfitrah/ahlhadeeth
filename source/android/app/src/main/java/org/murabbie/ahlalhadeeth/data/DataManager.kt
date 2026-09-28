@@ -239,8 +239,10 @@ class DataManager(private val context: Context, private val settings: Settings) 
         return Manifest(o.optInt("version", 1), pack, release, servers, ext, packs, defaultServer)
     }
 
-    suspend fun fetchManifest(url: String = settings.value.manifestUrl): Manifest {
-        val text = NasHttp.fetchText(url)
+    suspend fun fetchManifest(url: String = settings.value.manifestUrl): Manifest = applyManifest(NasHttp.fetchText(url))
+
+    /** يطبّق manifest (من الشبكة أو المضمَّن): خوادم الصوت وإعدادات المحتوى المشترك */
+    private fun applyManifest(text: String): Manifest {
         val m = parseManifest(text)
         _manifest.value = m
         settings.mergeAudioServers(m.audioServers, m.defaultAudioServer)
@@ -268,6 +270,9 @@ class DataManager(private val context: Context, private val settings: Settings) 
         job = scope.launch {
             try {
                 redownloadError.value = null
+                // نسخة المتجر: القاعدة مضمَّنة في حزمة أصول install-time فتُثبَّت عند أول تشغيل بلا شبكة؛
+                // إن غابت الحزمة (التوزيع المباشر) أو فشل تثبيتها يُكمل التنزيل من الشبكة كما كان
+                if (readyState == null && installBundled(gen)) return@launch
                 val m = fetchManifest(manifestUrl)
                 val pack = m.data ?: throw IllegalStateException("ملف الوصف لا يحوي بيانات")
                 if (pack.parts.isEmpty()) throw IllegalStateException("لا توجد أجزاء للتنزيل")
@@ -428,6 +433,59 @@ class DataManager(private val context: Context, private val settings: Settings) 
         if (!tmp.renameTo(dbFile)) throw IllegalStateException("تعذر حفظ قاعدة البيانات")
         versionFile.writeText(pack?.version ?: "local")
         openIfPresent()
+    }
+
+    /** فشلت القاعدة المضمَّنة في هذا التشغيل: لا تُعاد مع كل محاولة تلقائية، فالشبكة وحدها بعدها */
+    private var bundleFailed = false
+
+    /** يثبّت القاعدة من حزمة أصول Play (dbpack) بالتحقق نفسه (الحجم وsha256 ثم فك الضغط)، ثم يطبّق manifest المضمَّن
+     *  (خوادم الصوت والمحتوى المشترك) بلا شبكة؛ false = غير مضمَّنة أو فشلت فيُلجأ إلى الشبكة */
+    private suspend fun installBundled(gen: Int): Boolean {
+        if (bundleFailed) return false
+        val text = runCatching { context.assets.open("db/manifest.json").bufferedReader().use { it.readText() } }.getOrNull() ?: return false
+        val pack = runCatching { parseManifest(text).data }.getOrNull() ?: return false
+        // بقايا محاولة مضمَّنة سابقة (نسخة أو فك ضغط) تُحذف قبل حساب المساحة؛ أجزاء الشبكة تبقى ليُستأنف منها إن لزمت
+        partsDir.listFiles()?.filter { it.name.contains(".bundled.") }?.forEach { it.delete() }
+        tmpFile.delete()
+        // المساحة: نسخة من الملف المضغوط + القاعدة بعد فك الضغط؛ نقصها خطأ صريح لا يُحوَّل إلى محاولة شبكة («لا يوجد اتصال»)
+        val need = pack.sizeGz + pack.sizeDb
+        val free = freeBytes(context.filesDir)
+        if (free in 0 until need) throw NoSpaceException("المساحة المتاحة (${ArabicText.formatSize(free)}) لا تكفي؛ يلزم نحو ${ArabicText.formatSize(need)}. حرِّر مساحة ثم اضغط «إعادة المحاولة».")
+        val part = File(partsDir, File(pack.file).name + ".bundled.$gen") // اسم لكل محاولة: إيقاف ثم متابعة أثناء النسخ لا يتقاطع على ملف واحد
+        return try {
+            _state.value = DataState.Installing("تجهيز البيانات المضمَّنة…", 0f)
+            context.assets.open("db/" + File(pack.file).name).use { input ->
+                FileOutputStream(part).use { out ->
+                    val buf = ByteArray(1024 * 1024)
+                    var done = 0L
+                    while (true) {
+                        currentCoroutineContext().ensureActive()
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        _state.value = DataState.Installing("تجهيز البيانات المضمَّنة… ${ArabicText.formatSize(done)}", (done.toFloat() / pack.sizeGz).coerceIn(0f, 1f))
+                    }
+                }
+            }
+            install(listOf(part), pack)
+            clearPartialDownloads()
+            runCatching { applyManifest(text) }
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            tmpFile.delete()
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("DataManager", "bundled DB install failed; falling back to network", e)
+            if (gen == downloadGen) { // محاولة أُلغيت واستُبدلت لا تغيّر حالة المحاولة الجديدة
+                bundleFailed = true
+                tmpFile.delete()
+                _state.value = DataState.Downloading(0, 0, 0, 0, "الاتصال بخادم البيانات…") // لا تبقى شاشة «التجهيز» أثناء محاولة الشبكة
+            }
+            false
+        } finally {
+            part.delete()
+        }
     }
 
     /** تثبيت من ملف محلي اختاره المستخدم (.db أو .db.gz) */

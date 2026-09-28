@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -21,8 +22,8 @@ android {
         applicationId = "org.murabbie.ahlalhadeeth"
         minSdk = 24
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.7.8"
+        versionCode = 20
+        versionName = "1.7.9"
         vectorDrawables.useSupportLibrary = true
         // رابط manifest الافتراضي على NAS (يمكن تغييره من الإعدادات)
         buildConfigField("String", "DEFAULT_MANIFEST_URL", "\"${project.findProperty("manifestUrl") ?: "https://files.murabbie.org/fsdownload/MANIFEST_ID/manifest.json"}\"")
@@ -79,6 +80,9 @@ android {
             isMinifyEnabled = false
         }
     }
+
+    // قاعدة البيانات المضمَّنة (Play Asset Delivery): لا تدخل إلا في AAB، فملفات APK للتوزيع المباشر لا تتغير
+    assetPacks += listOf(":dbpack")
 
     splits {
         abi {
@@ -138,4 +142,23 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+}
+
+// لا تُبنى حزمة المتجر بلا القاعدة المضمَّنة: بدونها يعود التطبيق إلى التنزيل من NAS عند أول فتح، وهي تجربة الرفض نفسها.
+// يُعلَّق على مهمة التغليف نفسها (لا على bundlePlayRelease التي تأتي بعد كتابة الملف) فلا يُكتب AAB ناقص أصلًا.
+val dbPackDir = rootProject.file("dbpack/src/main/assets/db")
+tasks.matching { it.name == "packagePlayReleaseBundle" }.configureEach {
+    val gz = File(dbPackDir, "ahl_alhadeeth.db.gz")
+    val meta = File(dbPackDir, "manifest.json")
+    doFirst {
+        val text = if (meta.exists()) meta.readText() else ""
+        val size = Regex("\"size_gz\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toLong()
+        val sha = Regex("\"sha256_gz\"\\s*:\\s*\"([0-9a-f]{64})\"").find(text)?.groupValues?.get(1)
+        require(Regex("\"file\"\\s*:\\s*\"${gz.name}\"").containsMatchIn(text)) { "dbpack: data.file in ${meta.name} must be ${gz.name}" }
+        require(gz.exists() && size != null && gz.length() == size) { "dbpack: ${gz.path} missing or size != size_gz (${gz.takeIf { it.exists() }?.length()} vs $size)" }
+        val md = MessageDigest.getInstance("SHA-256")
+        gz.inputStream().use { input -> val buf = ByteArray(1 shl 20); while (true) { val n = input.read(buf); if (n < 0) break; md.update(buf, 0, n) } }
+        val hex = md.digest().joinToString("") { "%02x".format(it) }
+        require(hex == sha) { "dbpack: sha256 of ${gz.name} ($hex) != sha256_gz ($sha)" }
+    }
 }

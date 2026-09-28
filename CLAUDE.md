@@ -39,6 +39,7 @@ Each of these looks like a bug or a smell to a cold reader. Each is deliberate.
 6. **`admins.json` is public by design** and holds only hashes and wrapped blobs. The design's known ceiling (every admin can unwrap the Gemini key) is documented in `01` §6 — a finding that restates it is not new.
 7. **Every release is signed with the same `release.keystore`** (alias `ahlalhadeeth`) and bumps `versionCode` in `app/build.gradle.kts`. A different key = no installed user can ever update.
 8. **Bundled SQLite (`androidx.sqlite:sqlite-bundled`), not the platform one** — needed for FTS5 and 16 KB page alignment. After any native-lib upgrade re-check `zipalign -c -P 16 -v 4`.
+8b. **The Play build carries the content DB as an install-time asset pack (`:dbpack`, since 1.7.9 / 20).** Build 19 was rejected (2026-09-28, Broken Functionality "not responding") on the first-launch 177 MB download screen. `DataManager.installBundled()` installs from `db/` in the assets with the same size+sha256 checks, applies the bundled `manifest.json` (audio servers, shared settings), and falls back to the network. Asset packs only enter AABs, so direct APKs are unchanged. When the data version changes, refresh both files in `dbpack/src/main/assets/db/` or the Play build ships the old data.
 9. **`jvmtest` compiles the app's real `data/` sources** with an exclude list in `jvmtest/build.gradle.kts`. A new file in `data/` that imports `android.*` must be added to that list, or jvmtest stops compiling.
 
 ---
@@ -66,6 +67,7 @@ Requirements: JDK 17+ for the app (`jvmTarget 17`), **JDK 21 toolchain for `jvmt
 | Other jvmtest modes | `user`, `segment`, `auto`, `admins`, `shared` (local merge logic); `net`, `gz`, `share`, `yt` (live, read-only); `report` (live, **writes** one test row to the content-report Google Form — not the NAS) |
 | Direct-distribution APKs | `gradle :app:assembleDirectRelease -PmanifestUrl=… -PsharedUrl=… -PadminsUrl=…` → `app/build/outputs/apk/direct/release/` |
 | Google Play bundle | `gradle :app:bundlePlayRelease -P…` (same three **plus `-PprivacyUrl=…`** — without it the in-app privacy link silently disappears) → `app/build/outputs/bundle/playRelease/` — run **separately** from `assemble` (ABI splits) |
+| Bundled DB for the Play bundle (**required** before `bundlePlayRelease`; the task fails without it) | `source/android/dbpack/src/main/assets/db/ahl_alhadeeth.db.gz` = the 7 parts from `manifest.json` `data.parts` concatenated in order (check each part's `sha256` and the whole file's `sha256_gz`), plus `manifest.json` = a copy of the live `manifest.json` (the app applies its audio servers and shared-content settings after the bundled install, offline). The `.gz` is gitignored (176 MB). Read-only NAS pull, one time. |
 | No NewPipe in the store build | `unzip -p app.apk 'classes*.dex' \| grep -a -c schabi` → `0`, and the same command on a `direct` APK must print `>0` (macOS `strings` does not read stdin, so the old `strings` pipeline printed nothing and passed vacuously) |
 | Python scripts syntax | `python3 -m py_compile source/*.py` |
 

@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "AhlAlhadeeth"
 include(":app")
+include(":dbpack")
